@@ -1,0 +1,56 @@
+{
+    "name": "diablo-like-rpg",
+    "version": "0.1.0",
+    "description": "アイソメトリックアクションRPG",
+    "main": "electron/main.js",
+    "scripts": {
+      "dev": "next dev",
+      "build": "next build",
+      "start": "next start",
+      "electron": "electron .",
+      "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+      "package": "next build && electron-builder"
+    },
+    "dependencies": {
+      "next": "^14.0.0",
+      "react": "^18.2.0",
+      "react-dom": "^18.2.0",
+      "phaser": "^3.60.0",
+      "phaser3-plugin-isometric": "^1.0.0",
+      "reactflow": "^11.10.0",
+      "simplex-noise": "^4.0.1",
+      "@tensorflow/tfjs": "^4.12.0",
+      "uuid": "^9.0.1",
+      "zustand": "^4.4.3",
+      "electron-is-dev": "^2.0.0"
+    },
+    "devDependencies": {
+      "concurrently": "^8.2.2",
+      "electron": "^27.0.0",
+      "electron-builder": "^24.6.4",
+      "wait-on": "^7.0.1"
+    },
+    "build": {
+      "appId": "com.example.diablo-like-rpg",
+      "productName": "DiabloLikeRPG",
+      "files": [
+        "!node_modules/**/*",
+        "electron/**/*",
+        "public/**/*",
+        ".next/**/*",
+        "package.json"
+      ],
+      "extraMetadata": {
+        "main": "electron/main.js"
+      },
+      "win": {
+        "target": "nsis"
+      },
+      "mac": {
+        "target": "dmg"
+      },
+      "linux": {
+        "target": "AppImage"
+      }
+    }
+}
