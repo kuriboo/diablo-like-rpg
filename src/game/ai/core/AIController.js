@@ -1,5 +1,5 @@
 // src/game/ai/core/AIController.js
-import { generateUUID } from '../../../utils/uuid';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * AIコントローラーの基本クラス
@@ -7,7 +7,7 @@ import { generateUUID } from '../../../utils/uuid';
  */
 export default class AIController {
   constructor(owner) {
-    this.uuid = generateUUID();
+    this.uuid = uuidv4();
     this.owner = owner;
     this.active = true;
     this.behaviors = [];
