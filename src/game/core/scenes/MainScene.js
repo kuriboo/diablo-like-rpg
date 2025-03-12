@@ -1,399 +1,361 @@
 import Phaser from 'phaser';
-import MapGenerator from '../../map/MapGenerator';
-import CharacterFactory from '../../factories/CharacterFactory';
-import ItemFactory from '../../factories/ItemFactory';
-import ActionFactory from '../../factories/ActionFactory';
-import Player from '../../characters/Player';
-import AIController from '../../ai/AIController';
+import Player from '../characters/Player';
+import IsometricMap from '../map/IsometricMap';
+import MapGenerator from '../map/MapGenerator';
+import CharacterFactory from '../factories/CharacterFactory';
+import ItemFactory from '../factories/ItemFactory';
+import ActionFactory from '../factories/ActionFactory';
+import skillTreeManager from '../skills/core/SkillTreeManager';
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
     super({ key: 'MainScene' });
     
-    this.mapGenerator = null;
-    this.characterFactory = null;
-    this.itemFactory = null;
-    this.actionFactory = null;
-    
+    // プロパティの初期化
     this.player = null;
     this.companions = [];
     this.enemies = [];
     this.npcs = [];
     this.items = [];
+    this.isometricMap = null;
+    this.mapGenerator = null;
     
-    this.mapSize = { width: 50, height: 50 };
-    this.tileSize = { width: 64, height: 32 };
-    
-    this.cursors = null;
-    this.aiController = null;
-    
-    // カメラとプレイヤーのオフセット
-    this.cameraOffset = { x: 0, y: 0 };
-    
-    // イベントシステム
-    this.events = new Phaser.Events.EventEmitter();
+    // ファクトリーのインスタンス
+    this.characterFactory = null;
+    this.itemFactory = null;
+    this.actionFactory = null;
   }
-
+  
   init(data) {
-    // シーン初期化時のデータ受け取り
-    this.level = data.level || 1;
-    this.difficulty = data.difficulty || 'normal';
+    // 前のシーンからのデータ受け取り
+    this.gameData = data.gameData || {};
     
-    // ファクトリークラスの初期化
-    this.characterFactory = new CharacterFactory(this);
-    this.itemFactory = new ItemFactory(this);
-    this.actionFactory = new ActionFactory(this);
-    
-    // マップジェネレータの初期化
-    this.mapGenerator = new MapGenerator(this, this.mapSize, this.difficulty, this.level);
-    
-    // AI制御システムの初期化
-    this.aiController = new AIController(this);
+    // ファクトリーの初期化
+    this.characterFactory = CharacterFactory;
+    this.itemFactory = ItemFactory;
+    this.actionFactory = ActionFactory;
   }
-
+  
   preload() {
-    // アセットのロードはLoadingSceneで行うが、ここでも追加のアセットが必要な場合はロード
+    // 必要なアセットの読み込み
+    // (既にLoadingSceneで読み込まれているはず)
   }
-
-  create() {
-    // アイソメトリックプラグインのセットアップ
-    this.isometricPlugin = this.plugins.get('IsometricPlugin');
-    this.iso = this.isometricPlugin.projector;
-    
-    // マップの生成
-    const map = this.mapGenerator.generateMap();
-    this.createIsometricMap(map);
-    
-    // プレイヤーキャラクターの生成
-    this.player = this.characterFactory.createPlayer({
-      x: this.mapSize.width / 2,
-      y: this.mapSize.height / 2,
-      classType: 'warrior' // 仮のクラスタイプ
+  
+  async create() {
+    // マップジェネレーターの作成
+    this.mapGenerator = new MapGenerator({
+      scene: this,
+      width: 50,
+      height: 50
     });
+    
+    // アイソメトリックマップの作成
+    this.isometricMap = new IsometricMap({
+      scene: this,
+      mapData: await this.mapGenerator.generateMap('normal', 1)
+    });
+    
+    // プレイヤーの作成
+    this.createPlayer();
+    
+    // NPCの作成
+    this.createNPCs();
+    
+    // 敵の作成
+    this.createEnemies();
+    
+    // アイテムの作成
+    this.createItems();
+    
+    // カメラの設定
+    this.setupCamera();
+    
+    // UIシーンの開始
+    this.scene.launch('UIScene', { mainScene: this });
+    
+    // イベントリスナーの設定
+    this.setupEventListeners();
+    
+    // スキルツリーシステムの初期化
+    this.initializeSkillTreeSystem();
+  }
+  
+  update(time, delta) {
+    // 深度ソート
+    if (this.isometricMap) {
+      this.isometricMap.updateDepthSorting();
+    }
+    
+    // プレイヤーの更新
+    if (this.player) {
+      this.player.update(time, delta);
+    }
+    
+    // コンパニオンの更新
+    for (const companion of this.companions) {
+      companion.update(time, delta);
+    }
+    
+    // 敵の更新
+    for (const enemy of this.enemies) {
+      enemy.update(time, delta);
+    }
+    
+    // カメラのアップデート
+    this.updateCamera();
+  }
+  
+  createPlayer() {
+    // プレイヤーキャラクターの作成
+    this.player = this.characterFactory.createPlayer({
+      scene: this,
+      x: 400,
+      y: 300,
+      // プレイヤーの初期設定
+      level: this.gameData.playerLevel || 1,
+      classType: this.gameData.playerClass || 'warrior'
+    });
+    
+    // プレイヤーをシーンに追加
     this.add.existing(this.player);
     
-    // コンパニオンの生成（オプション）
-    const companion = this.characterFactory.createCompanion({
-      x: this.player.x + 1,
-      y: this.player.y + 1,
-      classType: 'rogue' // 仮のクラスタイプ
-    });
-    this.companions.push(companion);
-    this.add.existing(companion);
-    
-    // 敵とNPCの配置（マップデータから）
-    this.placeCharactersFromMap(map);
-    
-    // アイテムの配置
-    this.placeItemsFromMap(map);
-    
-    // カメラ設定
-    this.cameras.main.startFollow(this.player, true);
-    this.cameras.main.setZoom(1);
-    
-    // 入力設定
-    this.cursors = this.input.keyboard.createCursorKeys();
-    this.setupInputHandlers();
-    
-    // UI表示の通知
-    this.events.emit('scene-ready', this);
-    
-    // AIの開始
-    this.aiController.startAI();
-  }
-
-  update(time, delta) {
-    // プレイヤー入力処理
-    this.handlePlayerInput();
-    
-    // キャラクターの更新処理
-    this.updateCharacters(delta);
-    
-    // カメラの更新
-    this.updateCamera();
-    
-    // 衝突検出
-    this.checkCollisions();
-    
-    // AIの更新
-    this.aiController.update(delta);
-  }
-
-  createIsometricMap(mapData) {
-    // アイソメトリックマップの作成
-    this.isoGroup = this.add.group();
-    
-    // 地形タイルの配置
-    for (let y = 0; y < this.mapSize.height; y++) {
-      for (let x = 0; x < this.mapSize.width; x++) {
-        const tileType = mapData.terrain[y][x];
-        const tileX = (x - y) * this.tileSize.width / 2;
-        const tileY = (x + y) * this.tileSize.height / 2;
-        
-        // タイルの作成と配置
-        const tile = this.add.isoSprite(tileX, tileY, 0, `tile_${tileType}`, this.isoGroup);
-        tile.setInteractive();
-        
-        // タイルのプロパティ設定
-        tile.tileX = x;
-        tile.tileY = y;
-        tile.tileType = tileType;
-        tile.walkable = mapData.walkable[y][x];
-        
-        // イベントリスナー
-        tile.on('pointerdown', (pointer) => {
-          this.onTileClicked(tile, pointer);
-        });
-      }
-    }
-    
-    // デプスソートの設定
-    this.isoGroup.children.entries.sort((a, b) => {
-      return (a.y - b.y) || (a.x - b.x);
-    });
-  }
-
-  placeCharactersFromMap(mapData) {
-    // マップデータから敵とNPCを配置
-    for (let y = 0; y < this.mapSize.height; y++) {
-      for (let x = 0; x < this.mapSize.width; x++) {
-        const objType = mapData.objects[y][x];
-        
-        if (objType === 1) { // Enemy
-          const enemy = this.characterFactory.createEnemy({
-            x: x,
-            y: y,
-            level: this.level,
-            difficulty: this.difficulty
-          });
-          this.enemies.push(enemy);
-          this.add.existing(enemy);
-        } 
-        else if (objType === 4) { // NPC
-          const npc = this.characterFactory.createNPC({
-            x: x,
-            y: y,
-            isShop: Math.random() > 0.7 // 70%の確率でショップNPC
-          });
-          this.npcs.push(npc);
-          this.add.existing(npc);
-        }
-      }
+    // デプスソート用配列に追加
+    if (this.isometricMap) {
+      this.isometricMap.addToDepthSortedObjects(this.player);
     }
   }
-
-  placeItemsFromMap(mapData) {
-    // マップデータからアイテムを配置（チェストなど）
-    for (let y = 0; y < this.mapSize.height; y++) {
-      for (let x = 0; x < this.mapSize.width; x++) {
-        const objType = mapData.objects[y][x];
-        
-        if (objType === 2) { // Chest
-          const chest = this.itemFactory.createChest({
-            x: x,
-            y: y,
-            level: this.level,
-            difficulty: this.difficulty
-          });
-          this.items.push(chest);
-          this.add.existing(chest);
-        }
-      }
-    }
-  }
-
-  handlePlayerInput() {
-    // キーボード入力による移動処理
-    if (!this.player || this.player.isPerformingAction) return;
+  
+  createNPCs() {
+    // NPCの作成ロジック
+    const npcPositions = this.mapGenerator.getNPCPositions();
     
-    const speed = this.player.getMoveSpeed();
-    let dx = 0;
-    let dy = 0;
-    
-    if (this.cursors.left.isDown) {
-      dx -= speed;
-    }
-    else if (this.cursors.right.isDown) {
-      dx += speed;
-    }
-    
-    if (this.cursors.up.isDown) {
-      dy -= speed;
-    }
-    else if (this.cursors.down.isDown) {
-      dy += speed;
-    }
-    
-    if (dx !== 0 || dy !== 0) {
-      // 移動アクションの実行
-      const moveAction = this.actionFactory.createBasicAction({
-        type: 'move',
-        owner: this.player,
-        position: { x: this.player.x + dx, y: this.player.y + dy }
+    for (const position of npcPositions) {
+      const npc = this.characterFactory.createNPC({
+        scene: this,
+        x: position.x,
+        y: position.y,
+        type: position.type || 'villager'
       });
       
-      if (this.canMoveToPosition(this.player.x + dx, this.player.y + dy)) {
-        moveAction.play();
+      // NPCをシーンに追加
+      this.add.existing(npc);
+      
+      // NPCをリストに追加
+      this.npcs.push(npc);
+      
+      // デプスソート用配列に追加
+      if (this.isometricMap) {
+        this.isometricMap.addToDepthSortedObjects(npc);
       }
     }
+  }
+  
+  createEnemies() {
+    // 敵の作成ロジック
+    const enemyPositions = this.mapGenerator.getEnemyPositions();
     
-    // アタックアクション（スペースキー）
-    if (this.input.keyboard.checkDown(this.input.keyboard.addKey('SPACE'), 250)) {
-      const attackAction = this.actionFactory.createBasicAction({
-        type: 'attack',
-        owner: this.player
+    for (const position of enemyPositions) {
+      const enemy = this.characterFactory.createEnemy({
+        scene: this,
+        x: position.x,
+        y: position.y,
+        level: position.level || this.gameData.currentLevel || 1,
+        type: position.type || 'skeleton'
       });
-      attackAction.play();
-    }
-    
-    // スキル使用（1-9キー）
-    for (let i = 1; i <= 9; i++) {
-      const key = this.input.keyboard.addKey(String(i));
-      if (this.input.keyboard.checkDown(key, 500)) {
-        this.usePlayerSkill(i - 1);
+      
+      // 敵をシーンに追加
+      this.add.existing(enemy);
+      
+      // 敵をリストに追加
+      this.enemies.push(enemy);
+      
+      // デプスソート用配列に追加
+      if (this.isometricMap) {
+        this.isometricMap.addToDepthSortedObjects(enemy);
       }
     }
   }
-
-  updateCharacters(delta) {
-    // すべてのキャラクターの更新処理
-    if (this.player) {
-      this.player.update(delta);
+  
+  createItems() {
+    // アイテムの作成ロジック
+    const itemPositions = this.mapGenerator.getItemPositions();
+    
+    for (const position of itemPositions) {
+      const item = this.itemFactory.createItem({
+        scene: this,
+        x: position.x,
+        y: position.y,
+        type: position.type || 'potion'
+      });
+      
+      // アイテムをシーンに追加
+      this.add.existing(item);
+      
+      // アイテムをリストに追加
+      this.items.push(item);
+      
+      // デプスソート用配列に追加（アイテムが表示オブジェクトの場合）
+      if (this.isometricMap && item.displaySprite) {
+        this.isometricMap.addToDepthSortedObjects(item.displaySprite);
+      }
     }
-    
-    this.companions.forEach(companion => companion.update(delta));
-    this.enemies.forEach(enemy => enemy.update(delta));
-    this.npcs.forEach(npc => npc.update(delta));
-    
-    // 深度ソート（レンダリング順序の調整）
-    this.depthSort();
   }
-
+  
+  setupCamera() {
+    // カメラの設定
+    if (this.player) {
+      this.cameras.main.startFollow(this.player);
+      this.cameras.main.setZoom(1);
+    }
+  }
+  
   updateCamera() {
-    // プレイヤーに追従するカメラの更新
+    // カメラの更新（必要に応じて）
+  }
+  
+  setupEventListeners() {
+    // 各種イベントリスナーの設定
+    this.input.keyboard.on('keydown-ESC', () => {
+      // メニューを表示
+      const uiScene = this.scene.get('UIScene');
+      if (uiScene) {
+        uiScene.toggleMenu();
+      }
+    });
+    
+    // プレイヤー移動イベント
+    this.input.on('pointerdown', (pointer) => {
+      if (this.player && !this.player.isDead) {
+        // クリック位置を取得
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        
+        // アイソメトリック座標に変換
+        const isoPoint = this.isometricMap.worldToIso(worldPoint.x, worldPoint.y);
+        
+        // 移動可能かチェック
+        if (this.isometricMap.isWalkableAt(isoPoint.x, isoPoint.y)) {
+          // 移動アクションを作成
+          const moveAction = this.actionFactory.createBasicAction('move', {
+            owner: this.player,
+            position: isoPoint,
+            scene: this
+          });
+          
+          // 移動アクション実行
+          moveAction.play();
+        }
+      }
+    });
+    
+    // 攻撃イベント
+    this.input.keyboard.on('keydown-SPACE', () => {
+      if (this.player && !this.player.isDead) {
+        // 攻撃アクションを作成
+        const attackAction = this.actionFactory.createBasicAction('attack', {
+          owner: this.player,
+          scene: this
+        });
+        
+        // 攻撃アクション実行
+        attackAction.play();
+      }
+    });
+    
+    // スキル使用イベント（1〜5キー）
+    for (let i = 1; i <= 5; i++) {
+      this.input.keyboard.on(`keydown-${i}`, () => {
+        if (this.player && !this.player.isDead) {
+          this.usePlayerSkill(i - 1);
+        }
+      });
+    }
+  }
+  
+  usePlayerSkill(skillIndex) {
+    // プレイヤーのスキルリストからスキルを取得
+    if (!this.player.specialActions) return;
+    
+    const skillKeys = Array.from(this.player.specialActions.keys());
+    if (skillIndex >= skillKeys.length) return;
+    
+    const skillKey = skillKeys[skillIndex];
+    const skillAction = this.player.specialActions.get(skillKey);
+    
+    if (skillAction) {
+      // スキル使用
+      skillAction.play();
+    }
+  }
+  
+  async initializeSkillTreeSystem() {
+    try {
+      // スキルツリーマネージャーの初期化
+      if (this.player) {
+        await skillTreeManager.initialize(this.player);
+        
+        // 初期スキルの設定（存在する場合）
+        if (this.gameData.unlockedSkills) {
+          for (const skillId of this.gameData.unlockedSkills) {
+            skillTreeManager.allocateSkillPoint(skillId, this.player);
+          }
+        }
+        
+        // プレイヤーのスキルリスト更新（ActionFactoryを使用）
+        this.updatePlayerSkills();
+        
+        console.log('Skill tree system initialized');
+      }
+    } catch (error) {
+      console.error('Failed to initialize skill tree system:', error);
+    }
+  }
+  
+  updatePlayerSkills() {
+    // プレイヤーに解放済みスキルを設定
     if (!this.player) return;
     
-    // カメラのポジション更新など
-  }
-
-  checkCollisions() {
-    // キャラクター間の衝突や相互作用をチェック
-    
-    // プレイヤーとアイテムの衝突
-    this.items.forEach(item => {
-      if (this.physics.overlap(this.player, item)) {
-        this.handleItemCollision(this.player, item);
-      }
-    });
-    
-    // プレイヤーと敵の衝突
-    this.enemies.forEach(enemy => {
-      if (this.physics.overlap(this.player, enemy)) {
-        // 敵との衝突処理
-      }
-    });
-    
-    // プレイヤーとNPCの衝突
-    this.npcs.forEach(npc => {
-      if (this.physics.overlap(this.player, npc)) {
-        this.handleNPCInteraction(npc);
-      }
-    });
-  }
-
-  handleItemCollision(player, item) {
-    // アイテムとの衝突処理
-    if (item.canInteract && !item.collected) {
-      item.onCollect(player);
-      // UI更新のイベント発行
-      this.events.emit('item-collected', item);
+    // 既存のスキルをクリア
+    if (!this.player.specialActions) {
+      this.player.specialActions = new Map();
     }
-  }
-
-  handleNPCInteraction(npc) {
-    // NPCとの相互作用
-    if (npc.canInteract && this.input.keyboard.checkDown(this.input.keyboard.addKey('E'), 500)) {
-      if (npc.isShop) {
-        // ショップUIを開く
-        this.events.emit('open-shop', npc);
-      } else {
-        // 会話UIを開く
-        this.events.emit('open-dialog', npc);
+    
+    // 解放済みスキルの取得
+    const unlockedSkills = skillTreeManager.playerSkillState.getUnlockedSkills();
+    
+    // スキルアクションの作成と設定
+    for (const skill of unlockedSkills) {
+      if (skill.type === 'skill') {
+        const skillAction = this.actionFactory.createActionFromSkillId(skill.id, this.player);
+        if (skillAction) {
+          this.player.specialActions.set(skill.id, skillAction);
+        }
       }
     }
   }
-
-  usePlayerSkill(skillIndex) {
-    // プレイヤーのスキル使用
-    if (!this.player || !this.player.canUseSkill()) return;
-    
-    const skill = this.player.getSkill(skillIndex);
-    if (skill) {
-      const specialAction = this.actionFactory.createSpecialAction({
-        type: skill.type,
-        owner: this.player,
-        skill: skill
-      });
-      specialAction.play();
+  
+  // スキルツリーUI表示
+  showSkillTree() {
+    // UIシーンにスキルツリー表示を要求
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene && uiScene.showSkillTree) {
+      uiScene.showSkillTree(this.player);
     }
   }
-
-  canMoveToPosition(x, y) {
-    // 指定位置に移動可能かをチェック
-    const targetTileX = Math.floor(x / this.tileSize.width);
-    const targetTileY = Math.floor(y / this.tileSize.height);
+  
+  // レベルアップ時の処理
+  playerLevelUp() {
+    if (!this.player) return;
     
-    // マップ範囲外チェック
-    if (targetTileX < 0 || targetTileX >= this.mapSize.width || 
-        targetTileY < 0 || targetTileY >= this.mapSize.height) {
-      return false;
+    // レベルアップ処理
+    this.player.levelUp();
+    
+    // スキルポイント追加
+    skillTreeManager.addSkillPoints(this.player);
+    
+    // レベルアップ通知
+    const uiScene = this.scene.get('UIScene');
+    if (uiScene && uiScene.showLevelUpNotification) {
+      uiScene.showLevelUpNotification();
     }
-    
-    // タイルの歩行可能判定
-    const tiles = this.isoGroup.getChildren();
-    for (const tile of tiles) {
-      if (tile.tileX === targetTileX && tile.tileY === targetTileY) {
-        return tile.walkable;
-      }
-    }
-    
-    return false;
-  }
-
-  onTileClicked(tile, pointer) {
-    // タイルクリック時の処理
-    if (pointer.rightButtonDown()) {
-      // 右クリックでの移動
-      if (tile.walkable && this.player && !this.player.isPerformingAction) {
-        const moveAction = this.actionFactory.createBasicAction({
-          type: 'move',
-          owner: this.player,
-          position: { x: tile.tileX * this.tileSize.width, y: tile.tileY * this.tileSize.height }
-        });
-        moveAction.play();
-      }
-    }
-  }
-
-  depthSort() {
-    // 描画順序のソート（奥のものから手前に向かって描画）
-    const allSprites = [
-      this.player,
-      ...this.companions,
-      ...this.enemies,
-      ...this.npcs,
-      ...this.items,
-      ...this.isoGroup.getChildren()
-    ].filter(Boolean);
-    
-    allSprites.sort((a, b) => {
-      // y座標が小さいものから大きいものへソート（奥から手前）
-      return (a.y - b.y) || (a.x - b.x);
-    });
-    
-    // 深度の設定
-    allSprites.forEach((sprite, index) => {
-      sprite.setDepth(index);
-    });
   }
 }

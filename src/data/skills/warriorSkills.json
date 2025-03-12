@@ -1,0 +1,100 @@
+{
+    "metadata": {
+      "classType": "warrior",
+      "displayName": "戦士",
+      "description": "近接戦闘のスペシャリスト"
+    },
+    "nodes": [
+      {
+        "id": "warrior_root",
+        "type": "root",
+        "position": { "x": 400, "y": 100 },
+        "name": "戦士の道",
+        "description": "戦士のスキルツリーの始まり",
+        "icon": "warrior_root.png",
+        "connections": ["warrior_str_1", "warrior_vit_1", "warrior_bash"]
+      },
+      {
+        "id": "warrior_str_1",
+        "type": "passive",
+        "position": { "x": 300, "y": 200 },
+        "name": "体力強化 I",
+        "description": "Strengthを3ポイント増加させる",
+        "icon": "strength_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Strength",
+            "value": 3
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["warrior_str_2"]
+      },
+      {
+        "id": "warrior_str_2",
+        "type": "passive",
+        "position": { "x": 300, "y": 300 },
+        "name": "体力強化 II",
+        "description": "Strengthをさらに5ポイント増加させる",
+        "icon": "strength_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Strength",
+            "value": 5
+          }
+        ],
+        "requiredLevel": 5,
+        "requiredPoints": 1,
+        "connections": ["warrior_str_3"]
+      },
+      {
+        "id": "warrior_vit_1",
+        "type": "passive",
+        "position": { "x": 500, "y": 200 },
+        "name": "生命力強化 I",
+        "description": "Vitalityを3ポイント増加させる",
+        "icon": "vitality_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Vitality",
+            "value": 3
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["warrior_vit_2"]
+      },
+      {
+        "id": "warrior_bash",
+        "type": "skill",
+        "position": { "x": 400, "y": 200 },
+        "name": "バッシュ",
+        "description": "敵を打ち据え、スタン効果を与える",
+        "icon": "bash.png",
+        "actionId": "special_bash",
+        "manaCost": 10,
+        "cooldown": 8,
+        "requiredLevel": 3,
+        "requiredPoints": 1,
+        "connections": ["warrior_cleave"]
+      },
+      {
+        "id": "warrior_cleave",
+        "type": "skill",
+        "position": { "x": 400, "y": 300 },
+        "name": "クリーブ",
+        "description": "円状範囲のすべての敵に武器ダメージの80%のダメージを与える",
+        "icon": "cleave.png",
+        "actionId": "special_cleave",
+        "manaCost": 15,
+        "cooldown": 12,
+        "requiredLevel": 6,
+        "requiredPoints": 1,
+        "connections": []
+      }
+    ]
+}

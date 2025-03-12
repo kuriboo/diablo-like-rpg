@@ -1,495 +1,370 @@
+import { v4 as uuidv4 } from 'uuid';
 import Action from '../actions/Action';
 import BasicAction from '../actions/BasicAction';
 import SpecialAction from '../actions/SpecialAction';
 import { ActionType } from '../../constants/actionTypes';
+import skillTreeManager from '../skills/core/SkillTreeManager';
 
-export default class ActionFactory {
-  constructor(scene) {
-    this.scene = scene;
+/**
+ * アクションファクトリークラス
+ * ゲーム内で使用される各種アクションを生成する責務を持つ
+ */
+class ActionFactory {
+  constructor() {
+    this.uuid = uuidv4();
+    this.actionTemplates = new Map(); // テンプレートアクションのマップ
+    this._initializeTemplates();
   }
-  
-  // 基本アクションの作成
-  createBasicAction(config = {}) {
-    // アクションタイプを取得
-    const type = config.type || ActionType.NONE;
+
+  /**
+   * 基本的なアクションテンプレートを初期化
+   * @private
+   */
+  _initializeTemplates() {
+    // 基本アクションテンプレートの登録
+    this._registerBasicActions();
     
-    // アクション所有者
-    const owner = config.owner || null;
-    
-    // アクション設定
-    const actionConfig = {
-      ...config,
-      type: type,
-      owner: owner,
-      scene: this.scene
-    };
-    
-    // アクション名の設定（デフォルト）
-    if (!actionConfig.name) {
-      actionConfig.name = this.getDefaultActionName(type);
-    }
-    
-    // アクション説明の設定（デフォルト）
-    if (!actionConfig.description) {
-      actionConfig.description = this.getDefaultActionDescription(type);
-    }
-    
-    // エフェクトキーの設定（デフォルト）
-    if (!actionConfig.effectKey) {
-      actionConfig.effectKey = this.getDefaultEffectKey(type);
-    }
-    
-    // サウンドキーの設定（デフォルト）
-    if (!actionConfig.soundKey) {
-      actionConfig.soundKey = this.getDefaultSoundKey(type);
-    }
-    
-    // アニメーションキーの設定（デフォルト）
-    if (!actionConfig.animationKey) {
-      actionConfig.animationKey = this.getDefaultAnimationKey(type, owner);
-    }
-    
-    // アクションタイプに応じた処理
-    switch (type) {
-      case ActionType.MOVE:
-        return this.createMoveAction(actionConfig);
-      case ActionType.ATTACK:
-        return this.createAttackAction(actionConfig);
-      case ActionType.CAST:
-        return this.createCastAction(actionConfig);
-      case ActionType.HEAL:
-        return this.createHealAction(actionConfig);
-      case ActionType.USE_ITEM:
-        return this.createUseItemAction(actionConfig);
-      case ActionType.INTERACT:
-        return this.createInteractAction(actionConfig);
-      default:
-        return new BasicAction(actionConfig);
-    }
+    // 特殊アクションテンプレートの登録
+    this._registerSpecialActions();
   }
-  
-  // 特殊アクションの作成
-  createSpecialAction(config = {}) {
-    // スキル情報の取得
-    const skill = config.skill || null;
+
+  /**
+   * 基本アクションテンプレートを登録
+   * @private
+   */
+  _registerBasicActions() {
+    // 移動アクション
+    this.actionTemplates.set('move', {
+      type: ActionType.MOVE,
+      name: '移動',
+      description: '指定した位置に移動します',
+      duration: 500
+    });
     
-    // アクションタイプを取得
-    const type = config.type || (skill ? skill.type : ActionType.NONE);
+    // 攻撃アクション
+    this.actionTemplates.set('attack', {
+      type: ActionType.ATTACK,
+      name: '攻撃',
+      description: '近接攻撃を行います',
+      duration: 500
+    });
     
-    // アクション所有者
-    const owner = config.owner || null;
+    // 範囲攻撃アクション
+    this.actionTemplates.set('area_attack', {
+      type: ActionType.ATTACK,
+      name: '範囲攻撃',
+      description: '範囲内の敵に攻撃を行います',
+      duration: 800,
+      areaOfEffect: true,
+      areaRadius: 100
+    });
     
-    // アクション設定
-    const actionConfig = {
-      ...config,
-      type: this.getSpecialActionType(type),
-      owner: owner,
-      scene: this.scene,
-      skill: skill
-    };
+    // 魔法攻撃アクション
+    this.actionTemplates.set('cast_attack', {
+      type: ActionType.CAST,
+      name: '魔法攻撃',
+      description: '魔法攻撃を行います',
+      duration: 800,
+      element: 'fire'
+    });
     
-    // アクション名の設定（デフォルト）
-    if (!actionConfig.name && skill) {
-      actionConfig.name = skill.name;
-    } else if (!actionConfig.name) {
-      actionConfig.name = this.getDefaultSpecialActionName(type);
-    }
+    // 回復アクション
+    this.actionTemplates.set('heal', {
+      type: ActionType.HEAL,
+      name: '回復',
+      description: 'HPを回復します',
+      duration: 500
+    });
     
-    // アクション説明の設定（デフォルト）
-    if (!actionConfig.description && skill) {
-      actionConfig.description = skill.description;
-    } else if (!actionConfig.description) {
-      actionConfig.description = this.getDefaultSpecialActionDescription(type);
-    }
+    // アイテム使用アクション
+    this.actionTemplates.set('use_item', {
+      type: ActionType.USE_ITEM,
+      name: 'アイテム使用',
+      description: 'アイテムを使用します',
+      duration: 500
+    });
     
-    // アイコンの設定
-    if (!actionConfig.icon && skill) {
-      actionConfig.icon = skill.icon;
-    }
-    
-    // 特殊アクションの作成
-    return new SpecialAction(actionConfig);
+    // インタラクションアクション
+    this.actionTemplates.set('interact', {
+      type: ActionType.INTERACT,
+      name: '相互作用',
+      description: 'オブジェクトと相互作用します',
+      duration: 300
+    });
   }
-  
-  // 移動アクションの作成
-  createMoveAction(config) {
-    // 移動特有の設定
-    const moveConfig = {
-      ...config,
-      duration: config.duration || this.calculateMoveDuration(config)
-    };
-    
-    return new BasicAction(moveConfig);
-  }
-  
-  // 攻撃アクションの作成
-  createAttackAction(config) {
-    // 攻撃特有の設定
-    const attackConfig = {
-      ...config,
-      value: config.value !== undefined ? config.value : this.calculateAttackDamage(config.owner),
-      range: config.range || this.getAttackRange(config.owner),
-      element: config.element || 'physical',
-      duration: config.duration || 500
-    };
-    
-    return new BasicAction(attackConfig);
-  }
-  
-  // 魔法詠唱アクションの作成
-  createCastAction(config) {
-    // 詠唱特有の設定
-    const castConfig = {
-      ...config,
-      value: config.value !== undefined ? config.value : this.calculateSpellDamage(config.owner, config.element),
-      element: config.element || 'fire',
-      areaOfEffect: config.areaOfEffect !== undefined ? config.areaOfEffect : false,
-      areaRadius: config.areaRadius || 150,
-      duration: config.duration || 800
-    };
-    
-    return new BasicAction(castConfig);
-  }
-  
-  // 回復アクションの作成
-  createHealAction(config) {
-    // 回復特有の設定
-    const healConfig = {
-      ...config,
-      value: config.value !== undefined ? config.value : this.calculateHealAmount(config.owner),
-      areaOfEffect: config.areaOfEffect !== undefined ? config.areaOfEffect : false,
-      areaRadius: config.areaRadius || 150,
-      duration: config.duration || 500
-    };
-    
-    return new BasicAction(healConfig);
-  }
-  
-  // アイテム使用アクションの作成
-  createUseItemAction(config) {
-    // アイテム使用特有の設定
-    const useItemConfig = {
-      ...config,
-      duration: config.duration || 500
-    };
-    
-    return new BasicAction(useItemConfig);
-  }
-  
-  // インタラクションアクションの作成
-  createInteractAction(config) {
-    // インタラクション特有の設定
-    const interactConfig = {
-      ...config,
-      duration: config.duration || 300
-    };
-    
-    return new BasicAction(interactConfig);
-  }
-  
-  // 移動時間の計算
-  calculateMoveDuration(config) {
-    if (!config.owner || !config.position) return 500;
-    
-    // 移動距離と速度に基づく時間計算
-    const distance = Phaser.Math.Distance.Between(
-      config.owner.x, config.owner.y,
-      config.position.x, config.position.y
-    );
-    
-    const speed = config.owner.getMoveSpeed ? 
-                 config.owner.getMoveSpeed() : 2;
-    
-    return Math.max(100, distance / speed * 100);
-  }
-  
-  // 攻撃ダメージの計算
-  calculateAttackDamage(owner) {
-    if (!owner) return 10;
-    
-    // キャラクターの基本攻撃力
-    let damage = owner.basicAttack || 10;
-    
-    // クラスや武器の補正を適用
-    if (owner.characterEquipments && owner.characterEquipments.rightHand) {
-      // 武器による追加ダメージ
-      if (owner.bonusAttack) {
-        damage *= (1 + owner.bonusAttack);
+
+  /**
+   * 特殊アクションテンプレートを登録
+   * @private
+   */
+  _registerSpecialActions() {
+    // 単体攻撃スキル
+    this.actionTemplates.set('skill_slash', {
+      type: ActionType.SKILL_ATTACK,
+      name: 'スラッシュ',
+      description: '敵に強力な一撃を与えます',
+      cooldown: 8000,
+      manaCost: 10,
+      skill: {
+        damage: 20,
+        element: 'physical',
+        range: 1,
+        castTime: 500
       }
-    }
+    });
     
-    return Math.floor(damage);
-  }
-  
-  // 魔法ダメージの計算
-  calculateSpellDamage(owner, element) {
-    if (!owner) return 15;
-    
-    // 基本魔法ダメージ
-    let damage = 15;
-    
-    // エネルギーによる補正
-    if (owner.energy) {
-      damage += Math.floor(owner.energy * 0.5);
-    }
-    
-    // 属性ダメージの追加
-    if (element === 'fire' && owner.fireDamage) {
-      damage += owner.fireDamage;
-    } else if (element === 'cold' && owner.coldDamage) {
-      damage += owner.coldDamage;
-    } else if (element === 'poison' && owner.poisonDamage) {
-      damage += owner.poisonDamage;
-    } else if (element === 'electric' && owner.electricDamage) {
-      damage += owner.electricDamage;
-    }
-    
-    return Math.floor(damage);
-  }
-  
-  // 回復量の計算
-  calculateHealAmount(owner) {
-    if (!owner) return 30;
-    
-    // 基本回復量
-    let amount = 30;
-    
-    // エネルギーによる補正
-    if (owner.energy) {
-      amount += Math.floor(owner.energy * 0.3);
-    }
-    
-    // 回復力補正
-    if (owner.healingPower) {
-      amount *= (1 + owner.healingPower / 100);
-    }
-    
-    return Math.floor(amount);
-  }
-  
-  // 攻撃範囲の取得
-  getAttackRange(owner) {
-    if (!owner) return 1;
-    
-    // デフォルトは近接攻撃
-    let range = 1;
-    
-    // 装備に基づく範囲
-    if (owner.characterEquipments && owner.characterEquipments.rightHand) {
-      const weapon = owner.characterEquipments.rightHand;
-      
-      // 遠距離武器の場合
-      if (weapon.type === 'oneHandLongRangeWeapon' || 
-          weapon.type === 'twoHandLongRangeWeapon') {
-        range = 5; // 遠距離
+    // 範囲攻撃スキル
+    this.actionTemplates.set('skill_fire_nova', {
+      type: ActionType.SKILL_AREA_ATTACK,
+      name: 'ファイアノヴァ',
+      description: '周囲の敵に炎のダメージを与えます',
+      cooldown: 15000,
+      manaCost: 25,
+      skill: {
+        damage: 15,
+        element: 'fire',
+        areaOfEffect: true,
+        radius: 150,
+        castTime: 800
       }
+    });
+    
+    // バフスキル
+    this.actionTemplates.set('skill_battle_shout', {
+      type: ActionType.SKILL_BUFF,
+      name: 'バトルシャウト',
+      description: '味方の攻撃力を一時的に上昇させます',
+      cooldown: 30000,
+      manaCost: 20,
+      skill: {
+        duration: 10000,
+        targetSelf: false,
+        areaOfEffect: true,
+        radius: 200,
+        effects: {
+          attackBonus: 20 // 攻撃力20%上昇
+        }
+      }
+    });
+    
+    // デバフスキル
+    this.actionTemplates.set('skill_weaken', {
+      type: ActionType.SKILL_DEBUFF,
+      name: 'ウィークン',
+      description: '敵の防御力を一時的に下げます',
+      cooldown: 20000,
+      manaCost: 15,
+      skill: {
+        duration: 8000,
+        element: 'physical',
+        effects: {
+          defenceReduction: 30 // 防御力30%減少
+        }
+      }
+    });
+    
+    // 回復スキル
+    this.actionTemplates.set('skill_heal', {
+      type: ActionType.SKILL_HEAL,
+      name: 'ヒール',
+      description: '味方のHPを回復します',
+      cooldown: 15000,
+      manaCost: 30,
+      skill: {
+        healAmount: 50,
+        targetSelf: false,
+        castTime: 800
+      }
+    });
+    
+    // 召喚スキル
+    this.actionTemplates.set('skill_summon', {
+      type: ActionType.SKILL_SUMMON,
+      name: 'サモン',
+      description: '一定時間戦闘を助けるコンパニオンを召喚します',
+      cooldown: 60000,
+      manaCost: 50,
+      skill: {
+        summonType: 'skeleton',
+        summonDuration: 30000,
+        castTime: 1500
+      }
+    });
+    
+    // 移動/位置操作系スキル
+    this.actionTemplates.set('skill_dash', {
+      type: ActionType.SKILL_MOVEMENT,
+      name: 'ダッシュ',
+      description: '素早く前方に移動します',
+      cooldown: 5000,
+      manaCost: 5,
+      skill: {
+        moveDistance: 200,
+        moveSpeed: 8,
+        castTime: 300
+      }
+    });
+    
+    // 複合スキル
+    this.actionTemplates.set('skill_combo_attack', {
+      type: ActionType.SKILL_COMBO,
+      name: 'コンボアタック',
+      description: '3連続の攻撃を行います',
+      cooldown: 20000,
+      manaCost: 25,
+      skill: {
+        actions: [
+          { type: 'attack', damage: 15, duration: 300 },
+          { type: 'move', dx: 50, dy: 0, duration: 200 },
+          { type: 'attack', damage: 20, duration: 300 }
+        ]
+      }
+    });
+  }
+
+  /**
+   * 基本アクションを作成
+   * @param {string} actionKey - アクションのキー
+   * @param {Object} config - 追加設定
+   * @returns {BasicAction} - 作成された基本アクション
+   */
+  createBasicAction(actionKey, config = {}) {
+    // テンプレートが存在するか確認
+    if (!this.actionTemplates.has(actionKey)) {
+      console.error(`Action template not found: ${actionKey}`);
+      return null;
     }
     
-    return range;
-  }
-  
-  // 特殊アクションタイプの取得
-  getSpecialActionType(type) {
-    switch (type) {
-      case 'bash':
-      case 'slash':
-      case 'pierce':
-      case 'vital_strike':
-        return ActionType.SKILL_ATTACK;
-      
-      case 'fireball':
-      case 'ice_spike':
-      case 'lightning_bolt':
-      case 'poison_cloud':
-        return ActionType.SKILL_AREA_ATTACK;
-      
-      case 'battle_cry':
-      case 'bless':
-      case 'haste':
-      case 'shadow_hide':
-        return ActionType.SKILL_BUFF;
-      
-      case 'weaken':
-      case 'curse':
-      case 'slow':
-      case 'blind':
-        return ActionType.SKILL_DEBUFF;
-      
-      case 'heal':
-      case 'regeneration':
-      case 'cure':
-        return ActionType.SKILL_HEAL;
-      
-      case 'summon_wolf':
-      case 'summon_golem':
-      case 'summon_familiar':
-        return ActionType.SKILL_SUMMON;
-      
-      case 'dash':
-      case 'teleport':
-      case 'charge':
-      case 'jump':
-        return ActionType.SKILL_MOVEMENT;
-      
-      case 'combo_attack':
-      case 'skill_sequence':
-        return ActionType.SKILL_COMBO;
-      
-      default:
-        return ActionType.SKILL_ATTACK; // デフォルト
-    }
-  }
-  
-  // デフォルトのアクション名
-  getDefaultActionName(type) {
-    switch (type) {
-      case ActionType.MOVE:
-        return '移動';
-      case ActionType.ATTACK:
-        return '攻撃';
-      case ActionType.CAST:
-        return '魔法詠唱';
-      case ActionType.HEAL:
-        return '回復';
-      case ActionType.USE_ITEM:
-        return 'アイテム使用';
-      case ActionType.INTERACT:
-        return '相互作用';
-      default:
-        return 'アクション';
-    }
-  }
-  
-  // デフォルトのアクション説明
-  getDefaultActionDescription(type) {
-    switch (type) {
-      case ActionType.MOVE:
-        return '指定した位置まで移動します。';
-      case ActionType.ATTACK:
-        return '対象に攻撃を行います。';
-      case ActionType.CAST:
-        return '魔法を詠唱して発動します。';
-      case ActionType.HEAL:
-        return '対象を回復します。';
-      case ActionType.USE_ITEM:
-        return 'アイテムを使用します。';
-      case ActionType.INTERACT:
-        return '対象と相互作用します。';
-      default:
-        return 'アクションを実行します。';
-    }
-  }
-  
-  // デフォルトの特殊アクション名
-  getDefaultSpecialActionName(type) {
-    switch (type) {
-      case ActionType.SKILL_ATTACK:
-        return '特殊攻撃';
-      case ActionType.SKILL_AREA_ATTACK:
-        return '範囲攻撃';
-      case ActionType.SKILL_BUFF:
-        return '強化魔法';
-      case ActionType.SKILL_DEBUFF:
-        return '弱体化魔法';
-      case ActionType.SKILL_HEAL:
-        return '回復魔法';
-      case ActionType.SKILL_SUMMON:
-        return '召喚魔法';
-      case ActionType.SKILL_MOVEMENT:
-        return '移動技';
-      case ActionType.SKILL_COMBO:
-        return 'コンボ攻撃';
-      default:
-        return '特殊技';
-    }
-  }
-  
-  // デフォルトの特殊アクション説明
-  getDefaultSpecialActionDescription(type) {
-    switch (type) {
-      case ActionType.SKILL_ATTACK:
-        return '対象に特殊な攻撃を行います。';
-      case ActionType.SKILL_AREA_ATTACK:
-        return '範囲内の敵に攻撃を行います。';
-      case ActionType.SKILL_BUFF:
-        return '対象を強化する魔法を掛けます。';
-      case ActionType.SKILL_DEBUFF:
-        return '対象を弱体化する魔法を掛けます。';
-      case ActionType.SKILL_HEAL:
-        return '対象を回復する魔法を掛けます。';
-      case ActionType.SKILL_SUMMON:
-        return '援軍を召喚します。';
-      case ActionType.SKILL_MOVEMENT:
-        return '素早い移動を行います。';
-      case ActionType.SKILL_COMBO:
-        return '連続した攻撃を行います。';
-      default:
-        return '特殊な技を使用します。';
-    }
-  }
-  
-  // デフォルトのエフェクトキー
-  getDefaultEffectKey(type) {
-    switch (type) {
-      case ActionType.MOVE:
-        return 'move_effect';
-      case ActionType.ATTACK:
-        return 'attack_effect';
-      case ActionType.CAST:
-        return 'cast_effect';
-      case ActionType.HEAL:
-        return 'heal_effect';
-      case ActionType.USE_ITEM:
-        return 'use_item_effect';
-      case ActionType.INTERACT:
-        return 'interact_effect';
-      default:
-        return 'default_effect';
-    }
-  }
-  
-  // デフォルトのサウンドキー
-  getDefaultSoundKey(type) {
-    switch (type) {
-      case ActionType.MOVE:
-        return 'footstep_sound';
-      case ActionType.ATTACK:
-        return 'attack_sound';
-      case ActionType.CAST:
-        return 'cast_sound';
-      case ActionType.HEAL:
-        return 'heal_sound';
-      case ActionType.USE_ITEM:
-        return 'use_item_sound';
-      case ActionType.INTERACT:
-        return 'interact_sound';
-      default:
-        return 'default_sound';
-    }
-  }
-  
-  // デフォルトのアニメーションキー
-  getDefaultAnimationKey(type, owner) {
-    if (!owner) return '';
+    // テンプレートを取得
+    const template = this.actionTemplates.get(actionKey);
     
-    // キャラクタータイプを取得
-    const characterType = owner.constructor.name.toLowerCase();
+    // 設定をマージ
+    const actionConfig = {
+      ...template,
+      ...config
+    };
     
-    switch (type) {
-      case ActionType.MOVE:
-        return `${characterType}_walk`;
-      case ActionType.ATTACK:
-        return `${characterType}_attack`;
-      case ActionType.CAST:
-        return `${characterType}_cast`;
-      case ActionType.HEAL:
-        return `${characterType}_cast`;
-      case ActionType.USE_ITEM:
-        return `${characterType}_use`;
-      case ActionType.INTERACT:
-        return `${characterType}_interact`;
-      default:
-        return `${characterType}_idle`;
+    // アクションを作成して返す
+    return new BasicAction(actionConfig);
+  }
+
+  /**
+   * 特殊アクション（スキル）を作成
+   * @param {string} actionKey - スキルのキー
+   * @param {Object} config - 追加設定
+   * @returns {SpecialAction} - 作成された特殊アクション
+   */
+  createSpecialAction(actionKey, config = {}) {
+    // アクションキーがスキルIDの場合、ロードする
+    if (actionKey.startsWith('skill_')) {
+      // テンプレートが存在するか確認
+      if (!this.actionTemplates.has(actionKey)) {
+        console.error(`Skill template not found: ${actionKey}`);
+        return null;
+      }
+      
+      // テンプレートを取得
+      const template = this.actionTemplates.get(actionKey);
+      
+      // 設定をマージ
+      const actionConfig = {
+        ...template,
+        ...config
+      };
+      
+      // スキルアクションを作成して返す
+      return new SpecialAction(actionConfig);
     }
+    // スキルツリーからスキルを取得する場合
+    else {
+      return this._createSpecialActionFromSkillTree(actionKey, config);
+    }
+  }
+
+  /**
+   * スキルツリーからスキルを取得して特殊アクションを作成
+   * @param {string} skillId - スキルID
+   * @param {Object} config - 追加設定
+   * @returns {SpecialAction} - 作成された特殊アクション
+   * @private
+   */
+  _createSpecialActionFromSkillTree(skillId, config = {}) {
+    // スキルツリーマネージャーからスキルノードデータを取得
+    const skillData = skillTreeManager.getSkillNodeById(skillId);
+    
+    if (!skillData) {
+      console.error(`Skill not found in skill tree: ${skillId}`);
+      return null;
+    }
+    
+    // スキルタイプに応じたアクションタイプを決定
+    let actionType = ActionType.SKILL_ATTACK;
+    if (skillData.isAreaAttack) {
+      actionType = ActionType.SKILL_AREA_ATTACK;
+    } else if (skillData.isMovement) {
+      actionType = ActionType.SKILL_MOVEMENT;
+    } else if (skillData.isHeal) {
+      actionType = ActionType.SKILL_HEAL;
+    } else if (skillData.isBuff) {
+      actionType = ActionType.SKILL_BUFF;
+    } else if (skillData.isDebuff) {
+      actionType = ActionType.SKILL_DEBUFF;
+    } else if (skillData.isSummon) {
+      actionType = ActionType.SKILL_SUMMON;
+    } else if (skillData.isCombo) {
+      actionType = ActionType.SKILL_COMBO;
+    }
+    
+    // スキルの現在の効果を取得（レベルに応じた効果）
+    const currentEffects = skillData.getCurrentEffects ? 
+                          skillData.getCurrentEffects() : {};
+    
+    // スキル設定を構築
+    const skillConfig = {
+      type: actionType,
+      name: skillData.name,
+      description: skillData.description,
+      cooldown: currentEffects.cooldown || skillData.cooldown || 10000,
+      manaCost: currentEffects.manaCost || skillData.manaCost || 10,
+      skill: {
+        damage: currentEffects.damage || skillData.damage || 10,
+        element: skillData.element || 'physical',
+        range: skillData.range || 1,
+        areaOfEffect: skillData.isAreaAttack,
+        radius: currentEffects.areaBonus ? 
+               (skillData.radius + currentEffects.areaBonus) : skillData.radius,
+        duration: skillData.duration || 5000,
+        healAmount: currentEffects.healAmount || skillData.healAmount || 0,
+        castTime: skillData.castTime || 500,
+        targetSelf: skillData.targetSelf || false,
+        effects: skillData.effects || {},
+        level: skillData.level || 1,
+        // 追加効果
+        ...currentEffects.additionalEffects
+      },
+      // 追加の設定をマージ
+      ...config
+    };
+    
+    // スキルアクションを作成して返す
+    return new SpecialAction(skillConfig);
+  }
+
+  /**
+   * スキルIDからスキルアクションを直接生成
+   * UIやスキルツリーから呼び出される際に使用
+   * @param {string} skillId - スキルID
+   * @param {Object} character - キャラクターオブジェクト
+   * @returns {SpecialAction} - 作成された特殊アクション
+   */
+  createActionFromSkillId(skillId, character) {
+    return this.createSpecialAction(skillId, {
+      owner: character,
+      scene: character.scene
+    });
   }
 }
+
+// シングルトンとしてエクスポート
+const actionFactory = new ActionFactory();
+export default actionFactory;

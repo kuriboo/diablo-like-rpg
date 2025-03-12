@@ -1,345 +1,841 @@
 import Phaser from 'phaser';
+import React from 'react';
+import ReactDOM from 'react-dom';
+import SkillTree from '../../../components/ui/SkillTree';
+import skillTreeManager from '../../skills/core/SkillTreeManager';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
     super({ key: 'UIScene' });
     
-    this.player = null;
-    this.mainScene = null;
-    
     // UI要素
     this.healthBar = null;
     this.manaBar = null;
-    this.potionCounter = null;
-    this.levelText = null;
-    this.minimap = null;
+    this.expBar = null;
+    this.skillBar = null;
+    this.statusTexts = {};
     this.buffIcons = [];
-    this.skillIcons = [];
+    this.minimap = null;
     
-    // UI設定
-    this.barWidth = 200;
-    this.barHeight = 20;
-    this.barPadding = 5;
-    this.iconSize = 32;
-  }
-
-  init() {
-    // メインシーンへの参照を取得
-    this.mainScene = this.scene.get('MainScene');
+    // メニュー関連
+    this.menuOpen = false;
+    this.menuGroup = null;
     
-    // メインシーンからのイベントリスナー設定
-    this.mainScene.events.on('scene-ready', this.setupUI, this);
-    this.mainScene.events.on('player-health-changed', this.updateHealthBar, this);
-    this.mainScene.events.on('player-mana-changed', this.updateManaBar, this);
-    this.mainScene.events.on('player-potions-changed', this.updatePotionCounter, this);
-    this.mainScene.events.on('player-buff-added', this.addBuffIcon, this);
-    this.mainScene.events.on('player-buff-removed', this.removeBuffIcon, this);
-    this.mainScene.events.on('player-level-up', this.updateLevelText, this);
-    this.mainScene.events.on('minimap-update', this.updateMinimap, this);
-  }
-
-  preload() {
-    // UIアセットのロード
-    this.load.image('ui_frame', 'assets/images/ui/frame.png');
-    this.load.image('health_bar', 'assets/images/ui/health_bar.png');
-    this.load.image('mana_bar', 'assets/images/ui/mana_bar.png');
-    this.load.image('potion_icon', 'assets/images/ui/potion_icon.png');
-    this.load.image('skill_frame', 'assets/images/ui/skill_frame.png');
-    this.load.image('buff_frame', 'assets/images/ui/buff_frame.png');
-    this.load.image('minimap_frame', 'assets/images/ui/minimap_frame.png');
+    // メッセージ表示
+    this.messageText = null;
+    this.messageTimer = null;
     
-    // スキルアイコン
-    for (let i = 1; i <= 9; i++) {
-      this.load.image(`skill_icon_${i}`, `assets/images/ui/skill_${i}.png`);
-    }
+    // React UI関連
+    this.reactUIContainer = null;
+    this.reactUIRoot = null;
+    this.currentReactComponent = null;
   }
-
+  
+  init(data) {
+    // MainSceneへの参照を保持
+    this.mainScene = data.mainScene || this.scene.get('MainScene');
+  }
+  
   create() {
-    // UIの基本要素を作成
-    this.createUIBase();
-    
-    // スキルバーの作成
+    // UI要素の作成
+    this.createBars();
+    this.createStatusTexts();
     this.createSkillBar();
-    
-    // ミニマップの作成
     this.createMinimap();
+    this.createMenuGroup();
+    this.createMessageText();
     
-    // プレイヤーステータス領域の作成
-    this.createPlayerStatus();
+    // イベントリスナーの設定
+    this.setupEventListeners();
     
-    // 一時メッセージ表示用テキスト
-    this.messageText = this.add.text(
-      this.cameras.main.width / 2,
-      100,
-      '',
-      { fontFamily: 'Arial', fontSize: 24, color: '#ffffff' }
-    ).setOrigin(0.5, 0.5).setDepth(100).setVisible(false);
+    // React UI用のコンテナ準備
+    this.prepareReactUIContainer();
   }
-
-  setupUI(mainScene) {
-    // メインシーンが準備完了したらUIをセットアップ
-    this.player = mainScene.player;
+  
+  update(time, delta) {
+    // プレイヤー参照の更新
+    this.player = this.mainScene.player;
     
     if (this.player) {
-      // 初期UI更新
-      this.updateHealthBar();
-      this.updateManaBar();
-      this.updatePotionCounter();
-      this.updateLevelText();
+      // UIの更新
+      this.updateBars();
+      this.updateStatusTexts();
+      this.updateBuffIcons();
+      this.updateSkillBar();
+      this.updateMinimap();
     }
   }
-
-  createUIBase() {
-    // 背景フレーム（下部）
-    this.add.image(
-      this.cameras.main.width / 2,
-      this.cameras.main.height - 50,
-      'ui_frame'
-    ).setOrigin(0.5, 0.5).setDisplaySize(this.cameras.main.width, 100);
-    
-    // ミニマップ用フレーム（右上）
-    this.add.image(
-      this.cameras.main.width - 100,
-      100,
-      'minimap_frame'
-    ).setOrigin(0.5, 0.5).setDisplaySize(180, 180);
-    
-    // プレイヤーステータス用フレーム（左上）
-    this.add.image(
-      100,
-      60,
-      'ui_frame'
-    ).setOrigin(0.5, 0.5).setDisplaySize(180, 100);
-  }
-
-  createSkillBar() {
-    // スキルアイコンバー（画面下部）
-    this.skillIcons = [];
-    
-    const startX = this.cameras.main.width / 2 - (this.iconSize * 4.5);
-    const y = this.cameras.main.height - 50;
-    
-    for (let i = 0; i < 9; i++) {
-      // スキルフレーム
-      const frame = this.add.image(
-        startX + (i * (this.iconSize + 10)),
-        y,
-        'skill_frame'
-      ).setOrigin(0.5, 0.5).setDisplaySize(this.iconSize + 10, this.iconSize + 10);
-      
-      // スキルアイコン
-      const icon = this.add.image(
-        frame.x,
-        frame.y,
-        `skill_icon_${i+1}`
-      ).setOrigin(0.5, 0.5).setDisplaySize(this.iconSize, this.iconSize);
-      
-      // キー番号テキスト
-      const keyText = this.add.text(
-        frame.x,
-        frame.y + this.iconSize/2 + 10,
-        (i+1).toString(),
-        { fontFamily: 'Arial', fontSize: 12, color: '#ffffff' }
-      ).setOrigin(0.5, 0.5);
-      
-      // クリックイベント
-      frame.setInteractive();
-      frame.on('pointerdown', () => {
-        this.useSkill(i);
-      });
-      
-      this.skillIcons.push({ frame, icon, keyText });
-    }
-  }
-
-  createMinimap() {
-    // ミニマップの作成（右上）
-    const x = this.cameras.main.width - 100;
-    const y = 100;
-    const size = 150;
-    
-    this.minimap = this.add.graphics();
-    this.minimap.fillStyle(0x000000, 0.5);
-    this.minimap.fillRect(x - size/2, y - size/2, size, size);
-    
-    // プレイヤー位置表示用ドット
-    this.playerDot = this.add.graphics();
-    this.playerDot.fillStyle(0xff0000, 1);
-    this.playerDot.fillCircle(x, y, 3);
-  }
-
-  createPlayerStatus() {
+  
+  createBars() {
     // HPバー
-    const healthBarBg = this.add.graphics();
-    healthBarBg.fillStyle(0x000000, 0.5);
-    healthBarBg.fillRect(20, 40, this.barWidth, this.barHeight);
-    
     this.healthBar = this.add.graphics();
-    this.healthBar.fillStyle(0xff0000, 1);
+    this.healthBarBg = this.add.graphics();
+    this.healthBarBg.fillStyle(0x000000, 0.5);
+    this.healthBarBg.fillRect(10, 10, 200, 20);
     
-    // マナバー
-    const manaBarBg = this.add.graphics();
-    manaBarBg.fillStyle(0x000000, 0.5);
-    manaBarBg.fillRect(20, 40 + this.barHeight + this.barPadding, this.barWidth, this.barHeight);
-    
+    // MPバー
     this.manaBar = this.add.graphics();
-    this.manaBar.fillStyle(0x0000ff, 1);
+    this.manaBarBg = this.add.graphics();
+    this.manaBarBg.fillStyle(0x000000, 0.5);
+    this.manaBarBg.fillRect(10, 40, 200, 20);
     
-    // レベルテキスト
-    this.levelText = this.add.text(
-      20,
-      20,
-      'Level: 1',
-      { fontFamily: 'Arial', fontSize: 16, color: '#ffffff' }
-    );
-    
-    // ポーションカウンター
-    this.add.image(20 + this.iconSize/2, 100, 'potion_icon')
-      .setOrigin(0.5, 0.5)
-      .setDisplaySize(this.iconSize, this.iconSize);
-    
-    this.potionCounter = this.add.text(
-      20 + this.iconSize + 5,
-      100,
-      '0/0',
-      { fontFamily: 'Arial', fontSize: 16, color: '#ffffff' }
-    ).setOrigin(0, 0.5);
+    // 経験値バー
+    this.expBar = this.add.graphics();
+    this.expBarBg = this.add.graphics();
+    this.expBarBg.fillStyle(0x000000, 0.5);
+    this.expBarBg.fillRect(10, this.scale.height - 30, this.scale.width - 20, 20);
   }
-
-  updateHealthBar() {
-    if (!this.player) return;
+  
+  createStatusTexts() {
+    // ステータステキスト
+    this.statusTexts.level = this.add.text(10, 70, 'Lv: 1', {
+      fontSize: '16px',
+      fill: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2
+    });
     
-    const ratio = this.player.life / this.player.maxLife;
-    this.healthBar.clear();
-    this.healthBar.fillStyle(0xff0000, 1);
-    this.healthBar.fillRect(20, 40, this.barWidth * ratio, this.barHeight);
-  }
-
-  updateManaBar() {
-    if (!this.player) return;
+    this.statusTexts.health = this.add.text(220, 10, '100/100', {
+      fontSize: '16px',
+      fill: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2
+    });
     
-    const ratio = this.player.mana / this.player.maxMana;
-    this.manaBar.clear();
-    this.manaBar.fillStyle(0x0000ff, 1);
-    this.manaBar.fillRect(20, 40 + this.barHeight + this.barPadding, this.barWidth * ratio, this.barHeight);
-  }
-
-  updatePotionCounter() {
-    if (!this.player) return;
-    
-    this.potionCounter.setText(`${this.player.potionCount}/${this.player.maxPotion}`);
-  }
-
-  updateLevelText() {
-    if (!this.player) return;
-    
-    this.levelText.setText(`Level: ${this.player.level}`);
-  }
-
-  addBuffIcon(buff) {
-    // バフアイコンの追加
-    const x = 20 + (this.buffIcons.length * (this.iconSize + 5));
-    const y = 140;
-    
-    const frame = this.add.image(
-      x,
-      y,
-      'buff_frame'
-    ).setOrigin(0, 0.5).setDisplaySize(this.iconSize, this.iconSize);
-    
-    const icon = this.add.image(
-      x + this.iconSize/2,
-      y,
-      buff.image
-    ).setOrigin(0.5, 0.5).setDisplaySize(this.iconSize - 4, this.iconSize - 4);
-    
-    // バフ残り時間表示用テキスト
-    const timeText = this.add.text(
-      x + this.iconSize/2,
-      y + this.iconSize/2 - 2,
-      '',
-      { fontFamily: 'Arial', fontSize: 10, color: '#ffffff' }
-    ).setOrigin(0.5, 0.5);
-    
-    this.buffIcons.push({ id: buff.uuid, frame, icon, timeText });
-    
-    // バフ残り時間更新用タイマー
-    this.time.addEvent({
-      delay: 1000,
-      repeat: buff.duration,
-      callback: () => {
-        const remaining = buff.duration - (buff.duration - this.time.now + buff.startTime) / 1000;
-        if (remaining > 0) {
-          timeText.setText(Math.ceil(remaining).toString());
-        } else {
-          this.removeBuffIcon(buff.uuid);
-        }
-      }
+    this.statusTexts.mana = this.add.text(220, 40, '100/100', {
+      fontSize: '16px',
+      fill: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2
     });
   }
-
-  removeBuffIcon(buffId) {
-    // バフアイコンの削除
-    const index = this.buffIcons.findIndex(b => b.id === buffId);
-    if (index !== -1) {
-      const buff = this.buffIcons[index];
-      buff.frame.destroy();
-      buff.icon.destroy();
-      buff.timeText.destroy();
-      this.buffIcons.splice(index, 1);
+  
+  createSkillBar() {
+    // スキルバー背景
+    this.skillBarBg = this.add.graphics();
+    this.skillBarBg.fillStyle(0x000000, 0.5);
+    this.skillBarBg.fillRect(
+      this.scale.width / 2 - 150, 
+      this.scale.height - 80, 
+      300, 
+      60
+    );
+    
+    // スキルスロット
+    this.skillSlots = [];
+    
+    for (let i = 0; i < 5; i++) {
+      const x = this.scale.width / 2 - 125 + i * 50;
+      const y = this.scale.height - 70;
       
-      // 残りのアイコンを再配置
-      this.buffIcons.forEach((b, i) => {
-        b.frame.x = 20 + (i * (this.iconSize + 5));
-        b.icon.x = b.frame.x + this.iconSize/2;
-        b.timeText.x = b.icon.x;
+      // スロット背景
+      const slotBg = this.add.graphics();
+      slotBg.fillStyle(0x333333, 0.8);
+      slotBg.fillRect(x, y, 40, 40);
+      
+      // スロットボーダー
+      const slotBorder = this.add.graphics();
+      slotBorder.lineStyle(2, 0xffffff, 1);
+      slotBorder.strokeRect(x, y, 40, 40);
+      
+      // スキルアイコン（プレースホルダー）
+      const skillIcon = this.add.image(x + 20, y + 20, 'skill_placeholder');
+      skillIcon.setDisplaySize(36, 36);
+      
+      // クールダウンオーバーレイ
+      const cooldownOverlay = this.add.graphics();
+      
+      // スロット番号テキスト
+      const slotText = this.add.text(x + 5, y + 5, (i + 1).toString(), {
+        fontSize: '12px',
+        fill: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2
+      });
+      
+      // スロット情報をオブジェクトとして保存
+      this.skillSlots.push({
+        bg: slotBg,
+        border: slotBorder,
+        icon: skillIcon,
+        cooldown: cooldownOverlay,
+        text: slotText,
+        skillId: null,
+        cooldownEnd: 0
       });
     }
   }
-
-  updateMinimap() {
-    if (!this.player || !this.mainScene) return;
-    
-    // ミニマップの更新
-    const minimapX = this.cameras.main.width - 100;
-    const minimapY = 100;
+  
+  createMinimap() {
+    // ミニマップ
     const minimapSize = 150;
+    this.minimap = this.add.graphics();
+    this.minimapBg = this.add.graphics();
+    this.minimapBg.fillStyle(0x000000, 0.5);
+    this.minimapBg.fillRect(
+      this.scale.width - minimapSize - 10, 
+      10, 
+      minimapSize, 
+      minimapSize
+    );
     
-    // プレイヤーの位置をミニマップ上の座標に変換
-    const mapWidth = this.mainScene.mapSize.width;
-    const mapHeight = this.mainScene.mapSize.height;
-    
-    const playerMapX = this.player.x / (mapWidth * this.mainScene.tileSize.width);
-    const playerMapY = this.player.y / (mapHeight * this.mainScene.tileSize.height);
-    
-    const dotX = minimapX - minimapSize/2 + (playerMapX * minimapSize);
-    const dotY = minimapY - minimapSize/2 + (playerMapY * minimapSize);
-    
-    // プレイヤードットの位置更新
-    this.playerDot.clear();
-    this.playerDot.fillStyle(0xff0000, 1);
-    this.playerDot.fillCircle(dotX, dotY, 3);
+    // ミニマップボーダー
+    this.minimapBorder = this.add.graphics();
+    this.minimapBorder.lineStyle(2, 0xffffff, 1);
+    this.minimapBorder.strokeRect(
+      this.scale.width - minimapSize - 10, 
+      10, 
+      minimapSize, 
+      minimapSize
+    );
   }
-
-  useSkill(index) {
-    // スキルアイコンクリック時の処理
-    if (this.mainScene && this.mainScene.usePlayerSkill) {
-      this.mainScene.usePlayerSkill(index);
+  
+  createMenuGroup() {
+    // メニューグループ
+    this.menuGroup = this.add.group();
+    this.menuGroup.visible = false;
+    
+    // メニュー背景
+    const menuBg = this.add.graphics();
+    menuBg.fillStyle(0x000000, 0.8);
+    menuBg.fillRect(
+      this.scale.width / 2 - 150,
+      this.scale.height / 2 - 200,
+      300,
+      400
+    );
+    
+    // メニューボーダー
+    const menuBorder = this.add.graphics();
+    menuBorder.lineStyle(2, 0xffffff, 1);
+    menuBorder.strokeRect(
+      this.scale.width / 2 - 150,
+      this.scale.height / 2 - 200,
+      300,
+      400
+    );
+    
+    // メニュータイトル
+    const menuTitle = this.add.text(
+      this.scale.width / 2,
+      this.scale.height / 2 - 180,
+      'Menu',
+      {
+        fontSize: '24px',
+        fill: '#ffffff'
+      }
+    ).setOrigin(0.5, 0.5);
+    
+    // メニューボタン
+    const buttonY = this.scale.height / 2 - 130;
+    const buttonHeight = 40;
+    const buttonGap = 10;
+    
+    // インベントリボタン
+    const inventoryButton = this.createMenuButton(
+      this.scale.width / 2,
+      buttonY,
+      'Inventory',
+      () => this.showInventory()
+    );
+    
+    // スキルツリーボタン
+    const skillTreeButton = this.createMenuButton(
+      this.scale.width / 2,
+      buttonY + buttonHeight + buttonGap,
+      'Skill Tree',
+      () => this.showSkillTree()
+    );
+    
+    // キャラクター情報ボタン
+    const characterButton = this.createMenuButton(
+      this.scale.width / 2,
+      buttonY + (buttonHeight + buttonGap) * 2,
+      'Character Info',
+      () => this.showCharacterInfo()
+    );
+    
+    // 設定ボタン
+    const settingsButton = this.createMenuButton(
+      this.scale.width / 2,
+      buttonY + (buttonHeight + buttonGap) * 3,
+      'Settings',
+      () => this.showSettings()
+    );
+    
+    // 戻るボタン
+    const backButton = this.createMenuButton(
+      this.scale.width / 2,
+      buttonY + (buttonHeight + buttonGap) * 4,
+      'Back',
+      () => this.toggleMenu()
+    );
+    
+    // メニューグループに追加
+    this.menuGroup.add(menuBg);
+    this.menuGroup.add(menuBorder);
+    this.menuGroup.add(menuTitle);
+    this.menuGroup.add(inventoryButton);
+    this.menuGroup.add(skillTreeButton);
+    this.menuGroup.add(characterButton);
+    this.menuGroup.add(settingsButton);
+    this.menuGroup.add(backButton);
+  }
+  
+  createMenuButton(x, y, text, callback) {
+    // ボタン背景
+    const buttonBg = this.add.graphics();
+    buttonBg.fillStyle(0x333333, 1);
+    buttonBg.fillRect(x - 100, y - 20, 200, 40);
+    
+    // ボタンボーダー
+    const buttonBorder = this.add.graphics();
+    buttonBorder.lineStyle(2, 0xffffff, 1);
+    buttonBorder.strokeRect(x - 100, y - 20, 200, 40);
+    
+    // ボタンテキスト
+    const buttonText = this.add.text(x, y, text, {
+      fontSize: '18px',
+      fill: '#ffffff'
+    }).setOrigin(0.5, 0.5);
+    
+    // クリック可能な領域
+    const buttonZone = this.add.zone(x - 100, y - 20, 200, 40);
+    buttonZone.setInteractive();
+    buttonZone.on('pointerdown', callback);
+    
+    // ホバー効果
+    buttonZone.on('pointerover', () => {
+      buttonBg.clear();
+      buttonBg.fillStyle(0x555555, 1);
+      buttonBg.fillRect(x - 100, y - 20, 200, 40);
+    });
+    
+    buttonZone.on('pointerout', () => {
+      buttonBg.clear();
+      buttonBg.fillStyle(0x333333, 1);
+      buttonBg.fillRect(x - 100, y - 20, 200, 40);
+    });
+    
+    // グループとして返す
+    const buttonGroup = this.add.group();
+    buttonGroup.add(buttonBg);
+    buttonGroup.add(buttonBorder);
+    buttonGroup.add(buttonText);
+    buttonGroup.add(buttonZone);
+    
+    return buttonGroup;
+  }
+  
+  createMessageText() {
+    // メッセージテキスト
+    this.messageText = this.add.text(
+      this.scale.width / 2,
+      this.scale.height / 4,
+      '',
+      {
+        fontSize: '20px',
+        fill: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 3,
+        backgroundColor: '#00000080',
+        padding: {
+          x: 10,
+          y: 5
+        }
+      }
+    ).setOrigin(0.5, 0.5);
+    
+    this.messageText.setVisible(false);
+  }
+  
+  setupEventListeners() {
+    // キーボードイベント
+    this.input.keyboard.on('keydown-ESC', () => {
+      this.toggleMenu();
+    });
+    
+    this.input.keyboard.on('keydown-I', () => {
+      this.showInventory();
+    });
+    
+    this.input.keyboard.on('keydown-K', () => {
+      this.showSkillTree();
+    });
+    
+    this.input.keyboard.on('keydown-C', () => {
+      this.showCharacterInfo();
+    });
+  }
+  
+  prepareReactUIContainer() {
+    // React UIコンテナの準備
+    this.reactUIContainer = document.getElementById('react-ui');
+    
+    if (!this.reactUIContainer) {
+      // コンテナがなければ作成
+      this.reactUIContainer = document.createElement('div');
+      this.reactUIContainer.id = 'react-ui';
+      document.body.appendChild(this.reactUIContainer);
+      
+      // スタイル設定
+      this.reactUIContainer.style.position = 'absolute';
+      this.reactUIContainer.style.top = '0';
+      this.reactUIContainer.style.left = '0';
+      this.reactUIContainer.style.width = '100%';
+      this.reactUIContainer.style.height = '100%';
+      this.reactUIContainer.style.pointerEvents = 'none';
+      this.reactUIContainer.style.zIndex = '10';
+      this.reactUIContainer.style.display = 'none';
+    }
+    
+    // React UIルート要素の作成
+    this.reactUIRoot = document.createElement('div');
+    this.reactUIRoot.style.width = '100%';
+    this.reactUIRoot.style.height = '100%';
+    this.reactUIRoot.style.pointerEvents = 'auto';
+    
+    this.reactUIContainer.appendChild(this.reactUIRoot);
+  }
+  
+  updateBars() {
+    if (!this.player) return;
+    
+    // HPバー更新
+    const healthRatio = this.player.life / this.player.maxLife;
+    this.healthBar.clear();
+    this.healthBar.fillStyle(0xff0000, 1);
+    this.healthBar.fillRect(10, 10, 200 * healthRatio, 20);
+    
+    // MPバー更新
+    const manaRatio = this.player.mana / this.player.maxMana;
+    this.manaBar.clear();
+    this.manaBar.fillStyle(0x0000ff, 1);
+    this.manaBar.fillRect(10, 40, 200 * manaRatio, 20);
+    
+    // 経験値バー更新
+    const expRatio = this.player.exp / this.player.expToNextLevel;
+    this.expBar.clear();
+    this.expBar.fillStyle(0xffff00, 1);
+    this.expBar.fillRect(10, this.scale.height - 30, (this.scale.width - 20) * expRatio, 20);
+  }
+  
+  updateStatusTexts() {
+    if (!this.player) return;
+    
+    // テキスト更新
+    this.statusTexts.level.setText(`Lv: ${this.player.level}`);
+    this.statusTexts.health.setText(`${Math.floor(this.player.life)}/${this.player.maxLife}`);
+    this.statusTexts.mana.setText(`${Math.floor(this.player.mana)}/${this.player.maxMana}`);
+  }
+  
+  updateBuffIcons() {
+    if (!this.player) return;
+    
+    // バフアイコンのクリア
+    this.buffIcons.forEach(icon => icon.destroy());
+    this.buffIcons = [];
+    
+    // プレイヤーのバフ/デバフを表示
+    const buffs = this.player.buffs || [];
+    const debuffs = this.player.debuffs || [];
+    
+    // バフアイコンの表示
+    let iconIndex = 0;
+    const iconSize = 30;
+    const iconGap = 5;
+    const startX = 10;
+    const startY = 100;
+    
+    // バフアイコン
+    buffs.forEach(buff => {
+      const x = startX + (iconIndex % 5) * (iconSize + iconGap);
+      const y = startY + Math.floor(iconIndex / 5) * (iconSize + iconGap);
+      
+      const icon = this.add.image(x + iconSize / 2, y + iconSize / 2, buff.icon || 'buff_icon');
+      icon.setDisplaySize(iconSize, iconSize);
+      
+      // 残り時間表示
+      const timeLeft = buff.duration - (Date.now() - buff.startTime);
+      const seconds = Math.ceil(timeLeft / 1000);
+      
+      const timeText = this.add.text(x + iconSize / 2, y + iconSize - 5, seconds.toString(), {
+        fontSize: '10px',
+        fill: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2
+      }).setOrigin(0.5, 0.5);
+      
+      this.buffIcons.push(icon);
+      this.buffIcons.push(timeText);
+      
+      iconIndex++;
+    });
+    
+    // デバフアイコン
+    debuffs.forEach(debuff => {
+      const x = startX + (iconIndex % 5) * (iconSize + iconGap);
+      const y = startY + Math.floor(iconIndex / 5) * (iconSize + iconGap);
+      
+      const icon = this.add.image(x + iconSize / 2, y + iconSize / 2, debuff.icon || 'debuff_icon');
+      icon.setDisplaySize(iconSize, iconSize);
+      
+      // 残り時間表示
+      const timeLeft = debuff.duration - (Date.now() - debuff.startTime);
+      const seconds = Math.ceil(timeLeft / 1000);
+      
+      const timeText = this.add.text(x + iconSize / 2, y + iconSize - 5, seconds.toString(), {
+        fontSize: '10px',
+        fill: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2
+      }).setOrigin(0.5, 0.5);
+      
+      this.buffIcons.push(icon);
+      this.buffIcons.push(timeText);
+      
+      iconIndex++;
+    });
+  }
+  
+  updateSkillBar() {
+    if (!this.player) return;
+    
+    // プレイヤーのスキルを取得
+    const specialActions = this.player.specialActions || new Map();
+    const skillKeys = Array.from(specialActions.keys());
+    
+    // スキルスロットの更新
+    for (let i = 0; i < this.skillSlots.length; i++) {
+      const slot = this.skillSlots[i];
+      const skillKey = skillKeys[i];
+      
+      if (skillKey) {
+        const action = specialActions.get(skillKey);
+        
+        // スキルアイコンの更新
+        if (action && action.icon) {
+          slot.icon.setTexture(action.icon);
+        } else {
+          slot.icon.setTexture('skill_placeholder');
+        }
+        
+        // スキルIDの保存
+        slot.skillId = skillKey;
+        
+        // クールダウンの更新
+        if (action && action.skill && action.skill.lastUsed) {
+          const cooldownTime = action.cooldown || 10000;
+          const timeSinceLastUse = Date.now() - action.skill.lastUsed;
+          const cooldownRemaining = cooldownTime - timeSinceLastUse;
+          
+          if (cooldownRemaining > 0) {
+            slot.cooldownEnd = Date.now() + cooldownRemaining;
+            
+            // クールダウンオーバーレイの描画
+            const ratio = cooldownRemaining / cooldownTime;
+            const x = slot.bg.x;
+            const y = slot.bg.y;
+            
+            slot.cooldown.clear();
+            slot.cooldown.fillStyle(0x000000, 0.7);
+            slot.cooldown.fillRect(x, y, 40, 40 * ratio);
+            
+            // 残り時間表示
+            const seconds = Math.ceil(cooldownRemaining / 1000);
+            slot.text.setText(seconds.toString());
+          } else {
+            slot.cooldown.clear();
+            slot.text.setText((i + 1).toString());
+          }
+        } else {
+          slot.cooldown.clear();
+          slot.text.setText((i + 1).toString());
+        }
+      } else {
+        // スキルがない場合はプレースホルダー
+        slot.icon.setTexture('skill_placeholder');
+        slot.skillId = null;
+        slot.cooldown.clear();
+        slot.text.setText((i + 1).toString());
+      }
     }
   }
-
-  showMessage(message, duration = 2000) {
-    // 一時メッセージの表示
+  
+  updateMinimap() {
+    if (!this.player || !this.mainScene.isometricMap) return;
+    
+    // ミニマップのクリア
+    this.minimap.clear();
+    
+    // マップデータの取得
+    const mapData = this.mainScene.isometricMap.getMapData();
+    const mapWidth = mapData ? mapData.width : 50;
+    const mapHeight = mapData ? mapData.height : 50;
+    
+    // ミニマップの描画サイズ
+    const minimapSize = 150;
+    const tileSize = minimapSize / Math.max(mapWidth, mapHeight);
+    
+    // マップタイルの描画
+    if (mapData && mapData.tiles) {
+      for (let y = 0; y < mapHeight; y++) {
+        for (let x = 0; x < mapWidth; x++) {
+          const tile = mapData.tiles[y][x];
+          
+          if (tile) {
+            // タイルの種類に応じた色
+            let color = 0x333333; // デフォルト色
+            
+            switch (tile.type) {
+              case 'floor':
+                color = 0x666666;
+                break;
+              case 'wall':
+                color = 0x222222;
+                break;
+              case 'water':
+                color = 0x0000ff;
+                break;
+              case 'lava':
+                color = 0xff0000;
+                break;
+              default:
+                break;
+            }
+            
+            // タイルの描画
+            this.minimap.fillStyle(color, 1);
+            this.minimap.fillRect(
+              this.scale.width - minimapSize - 10 + x * tileSize,
+              10 + y * tileSize,
+              tileSize,
+              tileSize
+            );
+          }
+        }
+      }
+    }
+    
+    // プレイヤーの位置を描画
+    if (this.player) {
+      const playerX = this.player.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
+      const playerY = this.player.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+      
+      this.minimap.fillStyle(0x00ff00, 1);
+      this.minimap.fillRect(
+        this.scale.width - minimapSize - 10 + playerX * minimapSize - 2,
+        10 + playerY * minimapSize - 2,
+        4,
+        4
+      );
+    }
+    
+    // 敵の位置を描画
+    if (this.mainScene.enemies) {
+      this.mainScene.enemies.forEach(enemy => {
+        if (!enemy.isDead) {
+          const enemyX = enemy.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
+          const enemyY = enemy.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+          
+          this.minimap.fillStyle(0xff0000, 1);
+          this.minimap.fillRect(
+            this.scale.width - minimapSize - 10 + enemyX * minimapSize - 1,
+            10 + enemyY * minimapSize - 1,
+            3,
+            3
+          );
+        }
+      });
+    }
+    
+    // NPCの位置を描画
+    if (this.mainScene.npcs) {
+      this.mainScene.npcs.forEach(npc => {
+        const npcX = npc.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
+        const npcY = npc.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+        
+        this.minimap.fillStyle(0xffff00, 1);
+        this.minimap.fillRect(
+          this.scale.width - minimapSize - 10 + npcX * minimapSize - 1,
+          10 + npcY * minimapSize - 1,
+          3,
+          3
+        );
+      });
+    }
+  }
+  
+  toggleMenu() {
+    this.menuOpen = !this.menuOpen;
+    this.menuGroup.setVisible(this.menuOpen);
+    
+    // ゲームの一時停止/再開
+    if (this.menuOpen) {
+      this.scene.pause('MainScene');
+    } else {
+      this.scene.resume('MainScene');
+    }
+  }
+  
+  showInventory() {
+    // React UIを使用してインベントリを表示
+    this.hideReactUI();
+    // TODO: インベントリUIコンポーネントの表示
+    console.log('Show inventory');
+  }
+  
+  showSkillTree(character = null) {
+    // 引数がない場合はプレイヤーを使用
+    character = character || this.mainScene.player;
+    
+    if (!character) {
+      console.error('Character not found for skill tree');
+      return;
+    }
+    
+    try {
+      // メインシーンを一時停止
+      this.scene.pause('MainScene');
+      
+      // React UIを表示
+      this.showReactUI();
+      
+      // スキルツリーコンポーネントをレンダリング
+      ReactDOM.render(
+        React.createElement(SkillTree, {
+          character: character,
+          onClose: () => this.hideSkillTree()
+        }),
+        this.reactUIRoot
+      );
+    } catch (error) {
+      console.error('Error rendering skill tree:', error);
+      this.hideReactUI();
+      this.scene.resume('MainScene');
+    }
+  }
+  
+  hideSkillTree() {
+    // メインシーンを再開
+    this.scene.resume('MainScene');
+    
+    // React UIを非表示
+    this.hideReactUI();
+  }
+  
+  showCharacterInfo() {
+    // React UIを使用してキャラクター情報を表示
+    this.hideReactUI();
+    // TODO: キャラクター情報UIコンポーネントの表示
+    console.log('Show character info');
+  }
+  
+  showSettings() {
+    // React UIを使用して設定画面を表示
+    this.hideReactUI();
+    // TODO: 設定UIコンポーネントの表示
+    console.log('Show settings');
+  }
+  
+  showMessage(message, duration = 3000) {
+    // メッセージ表示
+    if (this.messageTimer) {
+      clearTimeout(this.messageTimer);
+    }
+    
     this.messageText.setText(message);
     this.messageText.setVisible(true);
     
-    this.time.delayedCall(duration, () => {
+    this.messageTimer = setTimeout(() => {
       this.messageText.setVisible(false);
+    }, duration);
+  }
+  
+  showLevelUpNotification() {
+    this.showMessage('Level Up!', 5000);
+    
+    // レベルアップエフェクト
+    const levelUpText = this.add.text(
+      this.scale.width / 2,
+      this.scale.height / 2,
+      'LEVEL UP!',
+      {
+        fontSize: '48px',
+        fill: '#ffff00',
+        stroke: '#000000',
+        strokeThickness: 6
+      }
+    ).setOrigin(0.5, 0.5);
+    
+    // アニメーション
+    this.tweens.add({
+      targets: levelUpText,
+      scale: { from: 0.5, to: 2 },
+      alpha: { from: 1, to: 0 },
+      ease: 'Power2',
+      duration: 2000,
+      onComplete: () => {
+        levelUpText.destroy();
+      }
     });
   }
-
-  update(time, delta) {
-    // UI要素の更新
-    this.updateMinimap();
+  
+  showReactUI() {
+    if (this.reactUIContainer) {
+      this.reactUIContainer.style.display = 'block';
+    }
+  }
+  
+  hideReactUI() {
+    if (this.reactUIContainer) {
+      this.reactUIContainer.style.display = 'none';
+      
+      // React要素のアンマウント
+      if (this.reactUIRoot) {
+        ReactDOM.unmountComponentAtNode(this.reactUIRoot);
+      }
+    }
+  }
+  
+  updateHealthBar() {
+    // HPバーの更新（外部からも呼び出せるように）
+    if (this.player) {
+      const healthRatio = this.player.life / this.player.maxLife;
+      this.healthBar.clear();
+      this.healthBar.fillStyle(0xff0000, 1);
+      this.healthBar.fillRect(10, 10, 200 * healthRatio, 20);
+      
+      this.statusTexts.health.setText(`${Math.floor(this.player.life)}/${this.player.maxLife}`);
+    }
+  }
+  
+  updateManaBar() {
+    // MPバーの更新（外部からも呼び出せるように）
+    if (this.player) {
+      const manaRatio = this.player.mana / this.player.maxMana;
+      this.manaBar.clear();
+      this.manaBar.fillStyle(0x0000ff, 1);
+      this.manaBar.fillRect(10, 40, 200 * manaRatio, 20);
+      
+      this.statusTexts.mana.setText(`${Math.floor(this.player.mana)}/${this.player.maxMana}`);
+    }
+  }
+  
+  updateSkillCooldown(skill) {
+    // 指定したスキルのクールダウン更新
+    if (!skill || !skill.id) return;
+    
+    for (const slot of this.skillSlots) {
+      if (slot.skillId === skill.id) {
+        // クールダウン更新
+        const cooldownTime = skill.cooldown || 10000;
+        slot.cooldownEnd = Date.now() + cooldownTime;
+        
+        // 表示を更新
+        this.updateSkillBar();
+        break;
+      }
+    }
   }
 }

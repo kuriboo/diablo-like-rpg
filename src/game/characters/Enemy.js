@@ -1,9 +1,16 @@
 import Character from './Character';
 import { getRandomInt } from '../../utils/mathUtils';
+import EnemyAI from '../ai/EnemyAI';
 
 export default class Enemy extends Character {
   constructor(scene, x, y, texture, config = {}) {
     super(scene, x, y, texture, config);
+
+    // AIコントローラの初期化
+    this.aiController = new EnemyAI(this);
+    
+    // ダメージ時のAIコールバック設定
+    this.on('damage', this.onDamage.bind(this));
     
     // 敵固有のプロパティ
     this.aggroRange = config.aggroRange || 200; // アグロ範囲
@@ -248,6 +255,11 @@ export default class Enemy extends Character {
   // 更新処理のオーバーライド
   update(time, delta) {
     super.update(time, delta);
+
+    // AIコントローラの更新
+    if (this.aiController) {
+      this.aiController.update(time, delta);
+    }
     
     // 死亡時は処理しない
     if (this.isDead) return;
@@ -590,4 +602,13 @@ export default class Enemy extends Character {
       experience: this.expValue
     };
   }
+
+  // ダメージ時のコールバック
+  onDamage(amount, damageType, isCritical, source) {
+    // AIコントローラに通知
+    if (this.aiController) {
+      this.aiController.onOwnerDamaged(amount, source);
+    }
+  }
+  
 }
