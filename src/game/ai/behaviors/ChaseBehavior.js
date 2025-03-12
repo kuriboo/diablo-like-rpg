@@ -1,128 +1,223 @@
-// src/game/ai/behaviors/ChaseBehavior.js
+import { NodeState } from '../core/BehaviorTree';
+
 /**
- * ターゲットを追跡する行動
+ * ChaseBehavior - Makes a character chase/pursue a target
  */
-export default class ChaseBehavior {
-    constructor(owner) {
-      this.owner = owner;
-      this.name = "chase";
-      this.controller = null; // AIControllerから設定される
-      this.isRunning = false;
-      this.speed = 1.2; // 通常移動の1.2倍
+class ChaseBehavior {
+  /**
+   * Create a new chase behavior
+   * @param {object} options - Configuration options
+   */
+  constructor(options = {}) {
+    this.options = {
+      updatePathInterval: 500, // ms between path recalculations
+      maxChaseDistance: 500, // Maximum chase distance
+      minDistance: 30, // Minimum distance to maintain from target
+      chaseSpeed: 1.5, // Speed multiplier while chasing
+      pathfindingEnabled: true, // Whether to use pathfinding
+      ...options
+    };
+    
+    this.lastPathUpdateTime = 0;
+    this.currentPath = [];
+    this.currentPathIndex = 0;
+    this.state = NodeState.FAILURE;
+  }
+
+  /**
+   * Execute the chase behavior
+   * @param {AIController} controller - The AI controller
+   * @param {number} delta - Time since last update
+   * @returns {string} The resulting state
+   */
+  execute(controller, delta) {
+    const owner = controller.owner;
+    const target = controller.target;
+    
+    // Validate owner and target
+    if (!owner || !target) {
+      this.state = NodeState.FAILURE;
+      return this.state;
     }
     
-    /**
-     * 行動開始時処理
-     */
-    enter() {
-      this.isRunning = true;
-      
-      // 追跡アニメーション設定
-      if (this.owner.animationState !== 'run') {
-        this.owner.animationState = 'run';
-        if (this.owner.playAnimation) {
-          this.owner.playAnimation();
-        }
-      }
+    // Check if target is alive
+    if (target.Life <= 0) {
+      controller.setTarget(null);
+      this.state = NodeState.FAILURE;
+      return this.state;
     }
     
-    /**
-     * 行動実行処理
-     */
-    execute(delta) {
-      if (!this.isRunning || !this.owner || !this.controller) return;
+    // Calculate distance to target
+    const distance = this.calculateDistance(owner.position, target.position);
+    
+    // If we're too far from target, stop chasing
+    if (distance > this.options.maxChaseDistance) {
+      this.state = NodeState.FAILURE;
+      return this.state;
+    }
+    
+    // If we're close enough to the target, succeed
+    if (distance <= this.options.minDistance) {
+      this.state = NodeState.SUCCESS;
+      return this.state;
+    }
+    
+    // Update path to target if needed
+    const currentTime = Date.now();
+    if (this.options.pathfindingEnabled && 
+        (currentTime - this.lastPathUpdateTime > this.options.updatePathInterval || 
+         this.currentPath.length === 0)) {
+      this.updatePath(controller);
+      this.lastPathUpdateTime = currentTime;
+    }
+    
+    // Follow the path or move directly to target
+    if (this.options.pathfindingEnabled && this.currentPath.length > 0) {
+      this.followPath(owner, delta);
+    } else {
+      this.moveDirectlyTowardsTarget(owner, target, delta);
+    }
+    
+    // Face the target
+    this.faceTarget(owner, target);
+    
+    this.state = NodeState.RUNNING;
+    return this.state;
+  }
+
+  /**
+   * Update the path to the target
+   * @param {AIController} controller - The AI controller
+   */
+  updatePath(controller) {
+    const owner = controller.owner;
+    const target = controller.target;
+    
+    // If we have a pathfinder in the controller, use it
+    const pathfinder = controller.getBlackboardValue('pathfinder');
+    if (pathfinder) {
+      this.currentPath = pathfinder.findPath(owner.position, target.position);
+      this.currentPathIndex = 0;
+    } else {
+      // No pathfinder available, clear the path
+      this.currentPath = [];
+    }
+  }
+
+  /**
+   * Follow the calculated path
+   * @param {Character} character - The character
+   * @param {number} delta - Time since last update
+   */
+  followPath(character, delta) {
+    if (this.currentPath.length === 0 || this.currentPathIndex >= this.currentPath.length) {
+      return;
+    }
+    
+    // Get current waypoint
+    const waypoint = this.currentPath[this.currentPathIndex];
+    
+    // Calculate distance to waypoint
+    const distance = this.calculateDistance(character.position, waypoint);
+    
+    // If we're close enough to the waypoint, move to the next one
+    if (distance <= 5) {
+      this.currentPathIndex++;
       
-      // ブラックボードからターゲットを取得
-      const target = this.controller.blackboard.target;
-      
-      if (!target || target.isDead) {
-        // ターゲットがいない/死亡した場合は行動終了
-        this.controller.blackboard.target = null;
-        this.controller.decideBehavior();
+      // If we've reached the end of the path, stop
+      if (this.currentPathIndex >= this.currentPath.length) {
         return;
       }
-      
-      // ターゲットへの移動
-      this.moveTowardsTarget(target, delta);
     }
     
-    /**
-     * ターゲットへ移動
-     */
-    moveTowardsTarget(target, delta) {
-      if (!this.owner || !target) return;
-      
-      // ターゲットの方向を向く
-      this.faceTarget(target);
-      
-      // 移動速度の計算
-      const moveSpeed = this.owner.getMoveSpeed ? 
-                       this.owner.getMoveSpeed() * this.speed : 
-                       2 * this.speed;
-      
-      // ターゲットとの距離と方向
-      const dx = target.x - this.owner.x;
-      const dy = target.y - this.owner.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // 方向の正規化
-      const normalizedDx = dx / distance;
-      const normalizedDy = dy / distance;
-      
-      // 移動量の計算
-      const moveAmount = moveSpeed * (delta / 16); // 60FPSを想定
-      
-      // 新しい位置
-      const newX = this.owner.x + normalizedDx * moveAmount;
-      const newY = this.owner.y + normalizedDy * moveAmount;
-      
-      // 移動可能かチェック
-      const canMove = !this.owner.scene.canMoveToPosition || 
-                      this.owner.scene.canMoveToPosition(newX, newY);
-      
-      if (canMove) {
-        this.owner.x = newX;
-        this.owner.y = newY;
-      }
-      
-      // 移動アニメーション
-      if (this.owner.animationState !== 'run') {
-        this.owner.animationState = 'run';
-        if (this.owner.playAnimation) {
-          this.owner.playAnimation();
-        }
-      }
-    }
+    // Move towards current waypoint
+    this.moveTowards(character, waypoint, delta);
+  }
+
+  /**
+   * Move directly towards the target without pathfinding
+   * @param {Character} character - The character
+   * @param {Character} target - The target
+   * @param {number} delta - Time since last update
+   */
+  moveDirectlyTowardsTarget(character, target, delta) {
+    this.moveTowards(character, target.position, delta);
+  }
+
+  /**
+   * Move a character towards a position
+   * @param {Character} character - The character
+   * @param {object} position - The target position
+   * @param {number} delta - Time since last update
+   */
+  moveTowards(character, position, delta) {
+    // Calculate direction vector
+    const dx = position.x - character.position.x;
+    const dy = position.y - character.position.y;
     
-    /**
-     * ターゲットの方向を向く
-     */
-    faceTarget(target) {
-      if (!this.owner || !target) return;
-      
-      const dx = target.x - this.owner.x;
-      const dy = target.y - this.owner.y;
-      
-      // 向きを決定（4方向）
-      if (Math.abs(dx) > Math.abs(dy)) {
-        this.owner.direction = dx > 0 ? 'right' : 'left';
-      } else {
-        this.owner.direction = dy > 0 ? 'down' : 'up';
-      }
-    }
+    // Normalize direction
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const dirX = dx / length;
+    const dirY = dy / length;
     
-    /**
-     * 行動終了時処理
-     */
-    exit() {
-      this.isRunning = false;
-      
-      // アニメーションをアイドルに戻す
-      if (this.owner) {
-        this.owner.animationState = 'idle';
-        if (this.owner.playAnimation) {
-          this.owner.playAnimation();
-        }
-      }
+    // Calculate movement distance
+    const speed = character.MoveSpeed * this.options.chaseSpeed;
+    const moveDistance = speed * delta / 1000; // Convert to seconds
+    
+    // Calculate new position
+    const newX = character.position.x + dirX * moveDistance;
+    const newY = character.position.y + dirY * moveDistance;
+    
+    // Update character position
+    if (character.move) {
+      character.move(newX, newY);
+    } else {
+      character.position.x = newX;
+      character.position.y = newY;
     }
+  }
+
+  /**
+   * Make a character face a target
+   * @param {Character} character - The character
+   * @param {Character} target - The target
+   */
+  faceTarget(character, target) {
+    if (!character || !target) return;
+    
+    // Calculate direction to target
+    const dx = target.position.x - character.position.x;
+    const dy = target.position.y - character.position.y;
+    
+    // Set character direction based on angle
+    const angle = Math.atan2(dy, dx);
+    
+    // Implementation depends on your character structure
+    if (character.setDirection) {
+      character.setDirection(angle);
+    }
+  }
+
+  /**
+   * Calculate distance between two positions
+   * @param {object} pos1 - First position
+   * @param {object} pos2 - Second position
+   * @returns {number} Distance between positions
+   */
+  calculateDistance(pos1, pos2) {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Reset the behavior's state
+   */
+  reset() {
+    this.state = NodeState.FAILURE;
+    this.currentPath = [];
+    this.currentPathIndex = 0;
+  }
 }
+
+export default ChaseBehavior;
