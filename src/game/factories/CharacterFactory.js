@@ -128,47 +128,384 @@ export default class CharacterFactory {
     return companion;
   }
   
-  // NPC作成
-  createNPC(config = {}) {
-    // NPCの位置
-    const x = config.x !== undefined ? config.x : (this.scene.cameras.main.width / 2);
-    const y = config.y !== undefined ? config.y : (this.scene.cameras.main.height / 2);
-    
-    // NPCタイプ
-    const npcType = config.npcType || this.getRandomNPCType();
-    
-    // NPCテクスチャ
-    const texture = config.texture || `npc_${npcType}`;
-    
-    // NPCの設定
+  /**
+   * NPCを作成するメソッド
+   * @param {object} config - NPC設定
+   * @returns {NPC} 生成されたNPCインスタンス
+   */
+  createNPC(config) {
+    // NPC設定のデフォルト値
     const npcConfig = {
-      name: config.name || this.generateNPCName(npcType),
+      scene: this.scene,
+      x: config.x || 0,
+      y: config.y || 0,
       isShop: config.isShop || false,
-      isStationary: config.isStationary !== undefined ? config.isStationary : true,
-      hasQuest: config.hasQuest || false
+      type: config.type || 'villager',
+      shopType: config.shopType || 'general',
+      shopItems: config.shopItems || [],
+      dialogues: config.dialogues || this.getDefaultDialogues(config.type, config.isShop)
     };
-    
-    // NPCの会話メッセージ
-    if (config.message) {
-      npcConfig.message = config.message;
-    } else {
-      npcConfig.message = this.generateNPCMessages(npcType, npcConfig.isShop);
+
+    // NPCインスタンス生成
+    const npc = new NPC(npcConfig);
+
+    // NPCタイプ別に追加設定
+    switch (npc.type) {
+      case 'blacksmith':
+        npc.setShopType('weapon');
+        if (!config.shopItems || config.shopItems.length === 0) {
+          npc.setShopItems(this.generateWeaponShopItems());
+        }
+        break;
+      case 'merchant':
+        npc.setShopType('general');
+        if (!config.shopItems || config.shopItems.length === 0) {
+          npc.setShopItems(this.generateGeneralShopItems());
+        }
+        break;
+      case 'alchemist':
+        npc.setShopType('potion');
+        if (!config.shopItems || config.shopItems.length === 0) {
+          npc.setShopItems(this.generatePotionShopItems());
+        }
+        break;
+      case 'jeweler':
+        npc.setShopType('jewelry');
+        if (!config.shopItems || config.shopItems.length === 0) {
+          npc.setShopItems(this.generateJewelryShopItems());
+        }
+        break;
+      case 'armorer':
+        npc.setShopType('armor');
+        if (!config.shopItems || config.shopItems.length === 0) {
+          npc.setShopItems(this.generateArmorShopItems());
+        }
+        break;
+      // 他のNPCタイプのケース
+      default:
+        // デフォルトは一般市民
+        break;
     }
-    
-    // ショップNPCの場合は商品を設定
-    if (npcConfig.isShop) {
-      npcConfig.stock = config.stock || this.generateShopStock(config.shopLevel || 1);
-    }
-    
-    // クエストNPCの場合はクエストを設定
-    if (npcConfig.hasQuest) {
-      npcConfig.quests = config.quests || this.generateNPCQuests(npcType);
-    }
-    
-    // NPCの作成
-    const npc = new NPC(this.scene, x, y, texture, npcConfig);
-    
+
     return npc;
+  }
+
+  /**
+   * NPCタイプに基づくデフォルト会話を取得
+   * @param {string} npcType - NPCタイプ
+   * @param {boolean} isShop - ショップNPCかどうか
+   * @returns {Array} 会話リスト
+   */
+  getDefaultDialogues(npcType, isShop) {
+    // 共通の挨拶
+    const greetings = [
+      "こんにちは、冒険者さん。",
+      "何かお手伝いできることはありますか？"
+    ];
+
+    // ショップNPC用会話
+    if (isShop) {
+      switch (npcType) {
+        case 'blacksmith':
+          return [
+            ...greetings,
+            "最高の武器を取り揃えていますよ。",
+            "この武器は特別に鍛えたものです。強さは保証します。",
+            "良い刃を手に入れるなら、今がチャンスですぞ。"
+          ];
+        case 'merchant':
+          return [
+            ...greetings,
+            "いろんな商品を取り扱っています。ごゆっくりどうぞ。",
+            "何か探しものはありますか？",
+            "旅のお供に必要なものは何でも揃いますよ。"
+          ];
+        case 'alchemist':
+          return [
+            ...greetings,
+            "私の薬は効き目抜群ですよ。",
+            "危険な冒険には良い薬が必要です。",
+            "この薬は特殊な素材から作られています。効果は保証しますよ。"
+          ];
+        case 'jeweler':
+          return [
+            ...greetings,
+            "最高の宝飾品を取り揃えています。",
+            "この宝石には不思議な力が宿っていますよ。",
+            "良い宝飾品は単なる装飾品以上の価値があります。"
+          ];
+        case 'armorer':
+          return [
+            ...greetings,
+            "丈夫な防具は命を守りますよ。",
+            "この鎧は特殊な金属から作られています。防御力は折り紙付きです。",
+            "良い防具なしで冒険に出るなんて無謀ですぞ。"
+          ];
+        default:
+          return [
+            ...greetings,
+            "いらっしゃいませ。",
+            "何かお探しですか？",
+            "良い品を取り揃えています。"
+          ];
+      }
+    }
+    
+    // 一般NPC用会話
+    switch (npcType) {
+      case 'villager':
+        return [
+          ...greetings,
+          "この辺りは最近物騒ですね。",
+          "東の森には近づかない方が良いですよ。怪物が出るという噂です。",
+          "あなたのような冒険者が来てくれて心強いです。"
+        ];
+      case 'guard':
+        return [
+          ...greetings,
+          "町の警備をしています。何か問題はありませんか？",
+          "最近、周辺で魔物の目撃情報が増えています。気をつけてください。",
+          "あなたも冒険者ですか？困ったことがあればいつでも声をかけてください。"
+        ];
+      case 'child':
+        return [
+          "こんにちは！",
+          "冒険者さんですか？すごいです！",
+          "大きくなったら私も冒険者になりたいです！",
+          "お父さんが「森には行くな」って言うんです。なんでだろう？"
+        ];
+      case 'elder':
+        return [
+          ...greetings,
+          "若い頃は私も冒険をしていたものじゃ。",
+          "この地域には古くから伝わる伝説があるのじゃ。",
+          "北の山に古代の遺跡があると言われているが、誰も戻ってこなかった…"
+        ];
+      case 'noble':
+        return [
+          "おや、冒険者ですか。",
+          "この町の治安維持にご協力いただければ幸いです。",
+          "私の家の宝物が盗まれてしまったのです。見つけてくれたら報酬を出しますよ。"
+        ];
+      case 'beggar':
+        return [
+          "恵んでもらえませんか…",
+          "昔は私も立派な戦士だったんですが…",
+          "東の洞窟に宝が眠っているという噂を聞いたことがありますよ…"
+        ];
+      case 'bard':
+        return [
+          ...greetings,
+          "新しい冒険の歌のネタを探しているんです。",
+          "あなたの冒険譚を聞かせてくれませんか？",
+          "この地方に伝わる英雄の伝説を知っていますか？"
+        ];
+      default:
+        return [
+          ...greetings,
+          "良い天気ですね。",
+          "冒険者さんですか？がんばってくださいね。",
+          "何かお困りですか？"
+        ];
+    }
+  }
+
+  /**
+   * 武器ショップのアイテムを生成
+   * @returns {Array} 武器アイテムリスト
+   */
+  generateWeaponShopItems() {
+    // この部分はItemFactoryと連携して実装するとよい
+    // 例として簡易的なアイテムリストを返す
+    return [
+      {
+        id: 'weapon_sword_1',
+        name: '鉄の剣',
+        type: 'weapon',
+        equipType: 'oneHandMeleeWeapon',
+        price: 100,
+        requiredLevel: 1,
+        basicAttack: 10
+      },
+      {
+        id: 'weapon_axe_1',
+        name: '戦斧',
+        type: 'weapon',
+        equipType: 'oneHandMeleeWeapon',
+        price: 150,
+        requiredLevel: 3,
+        basicAttack: 15
+      },
+      {
+        id: 'weapon_bow_1',
+        name: '猟弓',
+        type: 'weapon',
+        equipType: 'twoHandLongRangeWeapon',
+        price: 200,
+        requiredLevel: 5,
+        basicAttack: 12
+      }
+      // 他の武器アイテム
+    ];
+  }
+
+  /**
+   * 一般ショップのアイテムを生成
+   * @returns {Array} 一般アイテムリスト
+   */
+  generateGeneralShopItems() {
+    return [
+      {
+        id: 'potion_health_1',
+        name: '回復薬',
+        type: 'potion',
+        price: 50,
+        requiredLevel: 1,
+        effect: { type: 'health', value: 50 }
+      },
+      {
+        id: 'potion_mana_1',
+        name: 'マナ薬',
+        type: 'potion',
+        price: 50,
+        requiredLevel: 1,
+        effect: { type: 'mana', value: 50 }
+      },
+      {
+        id: 'scroll_identify',
+        name: '鑑定の巻物',
+        type: 'scroll',
+        price: 100,
+        requiredLevel: 1,
+        effect: { type: 'identify' }
+      }
+      // 他の一般アイテム
+    ];
+  }
+
+  /**
+   * ポーションショップのアイテムを生成
+   * @returns {Array} ポーションアイテムリスト
+   */
+  generatePotionShopItems() {
+    return [
+      {
+        id: 'potion_health_1',
+        name: '回復薬',
+        type: 'potion',
+        price: 50,
+        requiredLevel: 1,
+        effect: { type: 'health', value: 50 }
+      },
+      {
+        id: 'potion_health_2',
+        name: '大回復薬',
+        type: 'potion',
+        price: 120,
+        requiredLevel: 5,
+        effect: { type: 'health', value: 150 }
+      },
+      {
+        id: 'potion_mana_1',
+        name: 'マナ薬',
+        type: 'potion',
+        price: 50,
+        requiredLevel: 1,
+        effect: { type: 'mana', value: 50 }
+      },
+      {
+        id: 'potion_mana_2',
+        name: '大マナ薬',
+        type: 'potion',
+        price: 120,
+        requiredLevel: 5,
+        effect: { type: 'mana', value: 150 }
+      }
+      // 他のポーションアイテム
+    ];
+  }
+
+  /**
+   * 宝飾品ショップのアイテムを生成
+   * @returns {Array} 宝飾品アイテムリスト
+   */
+  generateJewelryShopItems() {
+    return [
+      {
+        id: 'ring_health_1',
+        name: '生命の指輪',
+        type: 'equipment',
+        equipType: 'ring',
+        price: 500,
+        requiredLevel: 10,
+        effects: [{ type: 'maxLife', value: 50 }]
+      },
+      {
+        id: 'amulet_mana_1',
+        name: '魔力のアミュレット',
+        type: 'equipment',
+        equipType: 'amulet',
+        price: 600,
+        requiredLevel: 12,
+        effects: [{ type: 'maxMana', value: 50 }]
+      },
+      {
+        id: 'ring_resist_1',
+        name: '炎の抵抗の指輪',
+        type: 'equipment',
+        equipType: 'ring',
+        price: 800,
+        requiredLevel: 15,
+        effects: [{ type: 'fireResistance', value: 20 }]
+      }
+      // 他の宝飾品アイテム
+    ];
+  }
+
+  /**
+   * 防具ショップのアイテムを生成
+   * @returns {Array} 防具アイテムリスト
+   */
+  generateArmorShopItems() {
+    return [
+      {
+        id: 'armor_leather_1',
+        name: '革の鎧',
+        type: 'equipment',
+        equipType: 'armour',
+        price: 200,
+        requiredLevel: 1,
+        basicDefence: 15
+      },
+      {
+        id: 'helm_leather_1',
+        name: '革のヘルメット',
+        type: 'equipment',
+        equipType: 'helm',
+        price: 100,
+        requiredLevel: 1,
+        basicDefence: 5
+      },
+      {
+        id: 'glove_leather_1',
+        name: '革の手袋',
+        type: 'equipment',
+        equipType: 'glove',
+        price: 80,
+        requiredLevel: 1,
+        basicDefence: 3
+      },
+      {
+        id: 'shield_wooden_1',
+        name: '木の盾',
+        type: 'equipment',
+        equipType: 'shield',
+        price: 150,
+        requiredLevel: 1,
+        basicDefence: 10
+      }
+      // 他の防具アイテム
+    ];
   }
   
   // クラスのテクスチャ名を取得

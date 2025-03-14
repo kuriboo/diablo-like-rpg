@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import SkillTree from '../../../components/ui/SkillTree';
-import skillTreeManager from '../../skills/core/SkillTreeManager';
 
 export default class UIScene extends Phaser.Scene {
   constructor() {
@@ -29,6 +28,13 @@ export default class UIScene extends Phaser.Scene {
     this.reactUIContainer = null;
     this.reactUIRoot = null;
     this.currentReactComponent = null;
+
+    //各種コンテナ
+    this.dialogueContainer = null;
+    this.shopContainer = null;
+
+    //通知テキスト
+    this.notificationText = null;
   }
   
   init(data) {
@@ -837,5 +843,627 @@ export default class UIScene extends Phaser.Scene {
         break;
       }
     }
+  }
+
+  /**
+   * NPC対話UIを表示
+   * @param {NPC} npc - 対話するNPC
+   */
+  showDialogue(npc) {
+    if (!npc) return;
+    
+    // プレイヤーとNPCの対話を開始
+    const dialogueData = npc.interact(this.mainScene.player);
+    
+    // 対話タイプに応じて処理を分岐
+    if (dialogueData.type === 'shop') {
+      this.showShopUI(dialogueData);
+    } else {
+      this.showDialogueUI(dialogueData);
+    }
+  }
+
+  /**
+   * 対話UIを表示
+   * @param {object} dialogueData - 対話データ
+   */
+  showDialogueUI(dialogueData) {
+    // 既存の対話UIがあれば削除
+    this.closeDialogueUI();
+    
+    // 対話UIコンテナを作成
+    this.dialogueContainer = this.add.container(0, 0);
+    
+    // 背景パネル
+    const bg = this.add.rectangle(
+      this.cameras.main.width / 2,
+      this.cameras.main.height - 150,
+      this.cameras.main.width - 100,
+      200,
+      0x000000
+    );
+    bg.setAlpha(0.8);
+    bg.setStrokeStyle(2, 0xffffff);
+    
+    // NPC名テキスト
+    const npcName = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      bg.y - bg.height / 2 + 20,
+      dialogueData.npc.type.charAt(0).toUpperCase() + dialogueData.npc.type.slice(1),
+      { font: '24px Arial', fill: '#ffff00' }
+    );
+    
+    // 対話テキスト
+    const dialogueText = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      npcName.y + npcName.height + 10,
+      dialogueData.dialogue,
+      { font: '18px Arial', fill: '#ffffff', wordWrap: { width: bg.width - 40 } }
+    );
+    
+    // 続けるボタン
+    const continueButton = this.add.text(
+      bg.x + bg.width / 2 - 100,
+      bg.y + bg.height / 2 - 30,
+      '続ける',
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    continueButton.setInteractive();
+    continueButton.on('pointerdown', () => {
+      // 次の対話を表示
+      const nextDialogue = dialogueData.npc.getDialogue();
+      dialogueText.setText(nextDialogue);
+    });
+    
+    // 閉じるボタン
+    const closeButton = this.add.text(
+      bg.x + bg.width / 2 - 50,
+      bg.y + bg.height / 2 - 30,
+      '閉じる',
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    closeButton.setInteractive();
+    closeButton.on('pointerdown', () => {
+      // 対話終了
+      dialogueData.npc.endInteraction();
+      this.closeDialogueUI();
+    });
+    
+    // コンテナに追加
+    this.dialogueContainer.add([bg, npcName, dialogueText, continueButton, closeButton]);
+    
+    // 固定表示（カメラの動きに影響されない）
+    this.dialogueContainer.setDepth(100);
+    this.dialogueContainer.setScrollFactor(0);
+  }
+
+  /**
+   * 対話UIを閉じる
+   */
+  closeDialogueUI() {
+    if (this.dialogueContainer) {
+      this.dialogueContainer.destroy();
+      this.dialogueContainer = null;
+    }
+  }
+
+  /**
+   * ショップUIを表示
+   * @param {object} shopData - ショップデータ
+   */
+  showShopUI(shopData) {
+    // 既存のショップUIがあれば削除
+    this.closeShopUI();
+    
+    // ショップUIコンテナを作成
+    this.shopContainer = this.add.container(0, 0);
+    
+    // 背景パネル
+    const bg = this.add.rectangle(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2,
+      this.cameras.main.width - 200,
+      this.cameras.main.height - 200,
+      0x000000
+    );
+    bg.setAlpha(0.8);
+    bg.setStrokeStyle(2, 0xffffff);
+    
+    // ショップ名テキスト
+    const shopType = shopData.shopType.charAt(0).toUpperCase() + shopData.shopType.slice(1);
+    const shopName = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      bg.y - bg.height / 2 + 20,
+      `${shopData.npc.type.charAt(0).toUpperCase() + shopData.npc.type.slice(1)}の${shopType}ショップ`,
+      { font: '24px Arial', fill: '#ffff00' }
+    );
+    
+    // 対話テキスト
+    const dialogueText = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      shopName.y + shopName.height + 10,
+      shopData.dialogue,
+      { font: '18px Arial', fill: '#ffffff', wordWrap: { width: bg.width - 40 } }
+    );
+    
+    // プレイヤーの所持金表示
+    const goldText = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      bg.y - bg.height / 2 + 60,
+      `所持金: ${this.mainScene.player.gold} G`,
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    
+    // アイテムリスト背景
+    const itemListBg = this.add.rectangle(
+      bg.x,
+      bg.y + 50,
+      bg.width - 40,
+      bg.height - 200,
+      0x222222
+    );
+    itemListBg.setAlpha(0.6);
+    
+    // アイテムリストタイトル
+    const buyTitle = this.add.text(
+      itemListBg.x - itemListBg.width / 2 + 20,
+      itemListBg.y - itemListBg.height / 2 - 20,
+      '商品リスト',
+      { font: '20px Arial', fill: '#ffffff' }
+    );
+    
+    // アイテムリスト作成
+    const itemList = [];
+    const itemButtons = [];
+    const itemStartY = itemListBg.y - itemListBg.height / 2 + 20;
+    const itemHeight = 30;
+    const itemsPerPage = 10;
+    let currentPage = 0;
+    const totalPages = Math.ceil(shopData.shopItems.length / itemsPerPage);
+    
+    // アイテムリストの表示更新関数
+    const updateItemList = (page) => {
+      // 既存のアイテムを削除
+      itemList.forEach(item => item.destroy());
+      itemList.length = 0;
+      itemButtons.forEach(button => button.destroy());
+      itemButtons.length = 0;
+      
+      // 表示するアイテムの範囲を計算
+      const startIndex = page * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, shopData.shopItems.length);
+      
+      // アイテムを表示
+      for (let i = startIndex; i < endIndex; i++) {
+        const item = shopData.shopItems[i];
+        const itemY = itemStartY + (i - startIndex) * itemHeight;
+        
+        // アイテム名と価格
+        const itemText = this.add.text(
+          itemListBg.x - itemListBg.width / 2 + 20,
+          itemY,
+          `${item.name} - ${item.price} G ${item.requiredLevel ? `(Lv.${item.requiredLevel})` : ''}`,
+          { font: '16px Arial', fill: '#ffffff' }
+        );
+        
+        // 購入ボタン
+        const buyButton = this.add.text(
+          itemListBg.x + itemListBg.width / 2 - 70,
+          itemY,
+          '購入',
+          { font: '16px Arial', fill: '#00ff00' }
+        );
+        buyButton.setInteractive();
+        buyButton.on('pointerdown', () => {
+          this.buyItem(shopData.npc, item);
+          // 所持金表示を更新
+          goldText.setText(`所持金: ${this.mainScene.player.gold} G`);
+        });
+        
+        // プレイヤーのレベルが足りない場合はボタンを無効化
+        if (item.requiredLevel && item.requiredLevel > this.mainScene.player.level) {
+          buyButton.setAlpha(0.5);
+          buyButton.disableInteractive();
+        }
+        
+        // プレイヤーの所持金が足りない場合もボタンを無効化
+        if (item.price > this.mainScene.player.gold) {
+          buyButton.setAlpha(0.5);
+          buyButton.disableInteractive();
+        }
+        
+        itemList.push(itemText);
+        itemButtons.push(buyButton);
+      }
+      
+      // ページ情報を表示
+      if (pageText) {
+        pageText.setText(`ページ: ${currentPage + 1}/${totalPages}`);
+      }
+    };
+    
+    // 初期表示
+    updateItemList(currentPage);
+    
+    // ページングボタン
+    let prevButton, nextButton, pageText;
+    
+    if (totalPages > 1) {
+      // 前ページボタン
+      prevButton = this.add.text(
+        itemListBg.x - 80,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        '前へ',
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      prevButton.setInteractive();
+      prevButton.on('pointerdown', () => {
+        if (currentPage > 0) {
+          currentPage--;
+          updateItemList(currentPage);
+        }
+      });
+      
+      // 次ページボタン
+      nextButton = this.add.text(
+        itemListBg.x + 80,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        '次へ',
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      nextButton.setInteractive();
+      nextButton.on('pointerdown', () => {
+        if (currentPage < totalPages - 1) {
+          currentPage++;
+          updateItemList(currentPage);
+        }
+      });
+      
+      // ページ表示
+      pageText = this.add.text(
+        itemListBg.x,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        `ページ: ${currentPage + 1}/${totalPages}`,
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      pageText.setOrigin(0.5);
+    }
+    
+    // プレイヤー所持アイテム表示ボタン
+    const inventoryButton = this.add.text(
+      bg.x,
+      bg.y + bg.height / 2 - 60,
+      'インベントリを開く',
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    inventoryButton.setOrigin(0.5);
+    inventoryButton.setInteractive();
+    inventoryButton.on('pointerdown', () => {
+      this.showInventoryForSelling(shopData.npc);
+    });
+    
+    // 閉じるボタン
+    const closeButton = this.add.text(
+      bg.x,
+      bg.y + bg.height / 2 - 30,
+      '閉じる',
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    closeButton.setOrigin(0.5);
+    closeButton.setInteractive();
+    closeButton.on('pointerdown', () => {
+      // ショップを閉じる
+      shopData.npc.endInteraction();
+      this.closeShopUI();
+    });
+    
+    // コンテナに追加
+    this.shopContainer.add([bg, shopName, dialogueText, goldText, itemListBg, buyTitle, closeButton, inventoryButton]);
+    
+    // ページングボタンがある場合は追加
+    if (totalPages > 1) {
+      this.shopContainer.add([prevButton, nextButton, pageText]);
+    }
+    
+    // アイテムリストを追加
+    itemList.forEach(item => this.shopContainer.add(item));
+    itemButtons.forEach(button => this.shopContainer.add(button));
+    
+    // 固定表示（カメラの動きに影響されない）
+    this.shopContainer.setDepth(100);
+    this.shopContainer.setScrollFactor(0);
+  }
+
+  /**
+   * ショップUIを閉じる
+   */
+  closeShopUI() {
+    if (this.shopContainer) {
+      this.shopContainer.destroy();
+      this.shopContainer = null;
+    }
+    
+    if (this.inventoryContainer) {
+      this.inventoryContainer.destroy();
+      this.inventoryContainer = null;
+    }
+  }
+
+  /**
+   * アイテム購入処理
+   * @param {NPC} npc - ショップNPC
+   * @param {object} item - 購入するアイテム
+   */
+  buyItem(npc, item) {
+    if (!npc || !item || !this.mainScene.player) return;
+    
+    // アイテムファクトリーを使用してアイテムインスタンスを生成
+    const itemInstance = this.mainScene.itemFactory.createItemFromData(item);
+    
+    if (itemInstance) {
+      // アイテムの購入
+      const success = npc.buyItem(this.mainScene.player, itemInstance);
+      
+      if (success) {
+        // 購入成功メッセージ
+        this.showNotification(`${item.name}を購入しました`);
+      } else {
+        // 購入失敗メッセージ
+        this.showNotification('購入に失敗しました');
+      }
+    }
+  }
+
+  /**
+   * 売却用インベントリ表示
+   * @param {NPC} npc - ショップNPC
+   */
+  showInventoryForSelling(npc) {
+    // 既存のインベントリUIがあれば削除
+    if (this.inventoryContainer) {
+      this.inventoryContainer.destroy();
+      this.inventoryContainer = null;
+    }
+    
+    // インベントリUIコンテナを作成
+    this.inventoryContainer = this.add.container(0, 0);
+    
+    // 背景パネル
+    const bg = this.add.rectangle(
+      this.cameras.main.width / 2,
+      this.cameras.main.height / 2,
+      this.cameras.main.width - 200,
+      this.cameras.main.height - 200,
+      0x000000
+    );
+    bg.setAlpha(0.8);
+    bg.setStrokeStyle(2, 0xffffff);
+    
+    // タイトルテキスト
+    const titleText = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      bg.y - bg.height / 2 + 20,
+      'インベントリ（アイテムをクリックで売却）',
+      { font: '24px Arial', fill: '#ffff00' }
+    );
+    
+    // プレイヤーの所持金表示
+    const goldText = this.add.text(
+      bg.x - bg.width / 2 + 20,
+      bg.y - bg.height / 2 + 60,
+      `所持金: ${this.mainScene.player.gold} G`,
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    
+    // アイテムリスト背景
+    const itemListBg = this.add.rectangle(
+      bg.x,
+      bg.y + 50,
+      bg.width - 40,
+      bg.height - 200,
+      0x222222
+    );
+    itemListBg.setAlpha(0.6);
+    
+    // プレイヤーのインベントリを取得
+    const inventory = this.mainScene.player.inventory || [];
+    
+    // アイテムリスト作成
+    const itemList = [];
+    const itemButtons = [];
+    const itemStartY = itemListBg.y - itemListBg.height / 2 + 20;
+    const itemHeight = 30;
+    const itemsPerPage = 10;
+    let currentPage = 0;
+    const totalPages = Math.ceil(inventory.length / itemsPerPage);
+    
+    // アイテムリストの表示更新関数
+    const updateItemList = (page) => {
+      // 既存のアイテムを削除
+      itemList.forEach(item => item.destroy());
+      itemList.length = 0;
+      itemButtons.forEach(button => button.destroy());
+      itemButtons.length = 0;
+      
+      // 表示するアイテムの範囲を計算
+      const startIndex = page * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, inventory.length);
+      
+      // アイテムを表示
+      for (let i = startIndex; i < endIndex; i++) {
+        const item = inventory[i];
+        const itemY = itemStartY + (i - startIndex) * itemHeight;
+        
+        // アイテム名と売却価格（購入価格の半分）
+        const sellPrice = Math.floor(item.price * 0.5);
+        const itemText = this.add.text(
+          itemListBg.x - itemListBg.width / 2 + 20,
+          itemY,
+          `${item.name} - 売却価格: ${sellPrice} G`,
+          { font: '16px Arial', fill: '#ffffff' }
+        );
+        
+        // 売却ボタン
+        const sellButton = this.add.text(
+          itemListBg.x + itemListBg.width / 2 - 70,
+          itemY,
+          '売却',
+          { font: '16px Arial', fill: '#ff9900' }
+        );
+        sellButton.setInteractive();
+        sellButton.on('pointerdown', () => {
+          this.sellItem(npc, item);
+          // 所持金表示を更新
+          goldText.setText(`所持金: ${this.mainScene.player.gold} G`);
+          // リストを更新
+          updateItemList(currentPage);
+        });
+        
+        // 装備中や特別なアイテムは売却できないように
+        if (item.isEquipped || item.isSpecial) {
+          sellButton.setAlpha(0.5);
+          sellButton.disableInteractive();
+        }
+        
+        itemList.push(itemText);
+        itemButtons.push(sellButton);
+      }
+      
+      // ページ情報を表示
+      if (pageText) {
+        pageText.setText(`ページ: ${currentPage + 1}/${totalPages}`);
+      }
+    };
+    
+    // 初期表示
+    updateItemList(currentPage);
+    
+    // ページングボタン
+    let prevButton, nextButton, pageText;
+    
+    if (totalPages > 1) {
+      // 前ページボタン
+      prevButton = this.add.text(
+        itemListBg.x - 80,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        '前へ',
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      prevButton.setInteractive();
+      prevButton.on('pointerdown', () => {
+        if (currentPage > 0) {
+          currentPage--;
+          updateItemList(currentPage);
+        }
+      });
+      
+      // 次ページボタン
+      nextButton = this.add.text(
+        itemListBg.x + 80,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        '次へ',
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      nextButton.setInteractive();
+      nextButton.on('pointerdown', () => {
+        if (currentPage < totalPages - 1) {
+          currentPage++;
+          updateItemList(currentPage);
+        }
+      });
+      
+      // ページ表示
+      pageText = this.add.text(
+        itemListBg.x,
+        itemListBg.y + itemListBg.height / 2 + 20,
+        `ページ: ${currentPage + 1}/${totalPages}`,
+        { font: '16px Arial', fill: '#ffffff' }
+      );
+      pageText.setOrigin(0.5);
+    }
+    
+    // 閉じるボタン
+    const closeButton = this.add.text(
+      bg.x,
+      bg.y + bg.height / 2 - 30,
+      'ショップに戻る',
+      { font: '18px Arial', fill: '#ffff00' }
+    );
+    closeButton.setOrigin(0.5);
+    closeButton.setInteractive();
+    closeButton.on('pointerdown', () => {
+      // インベントリを閉じる
+      if (this.inventoryContainer) {
+        this.inventoryContainer.destroy();
+        this.inventoryContainer = null;
+      }
+    });
+    
+    // コンテナに追加
+    this.inventoryContainer.add([bg, titleText, goldText, itemListBg, closeButton]);
+    
+    // ページングボタンがある場合は追加
+    if (totalPages > 1) {
+      this.inventoryContainer.add([prevButton, nextButton, pageText]);
+    }
+    
+    // アイテムリストを追加
+    itemList.forEach(item => this.inventoryContainer.add(item));
+    itemButtons.forEach(button => this.inventoryContainer.add(button));
+    
+    // 固定表示（カメラの動きに影響されない）
+    this.inventoryContainer.setDepth(101); // ショップUIより上に表示
+    this.inventoryContainer.setScrollFactor(0);
+  }
+
+  /**
+   * アイテム売却処理
+   * @param {NPC} npc - ショップNPC
+   * @param {object} item - 売却するアイテム
+   */
+  sellItem(npc, item) {
+    if (!npc || !item || !this.mainScene.player) return;
+    
+    // アイテムの売却
+    const success = npc.sellItem(this.mainScene.player, item);
+    
+    if (success) {
+      // 売却成功メッセージ
+      this.showNotification(`${item.name}を売却しました`);
+    } else {
+      // 売却失敗メッセージ
+      this.showNotification('売却に失敗しました');
+    }
+  }
+
+  /**
+   * 通知メッセージを表示
+   * @param {string} message - 表示するメッセージ
+   * @param {number} duration - 表示時間（ミリ秒）
+   */
+  showNotification(message, duration = 2000) {
+    // 既存の通知があれば削除
+    if (this.notificationText) {
+      this.notificationText.destroy();
+    }
+    
+    // 通知テキスト
+    this.notificationText = this.add.text(
+      this.cameras.main.width / 2,
+      this.cameras.main.height - 100,
+      message,
+      { font: '20px Arial', fill: '#ffffff', backgroundColor: '#000000' }
+    );
+    this.notificationText.setOrigin(0.5);
+    this.notificationText.setPadding(10);
+    this.notificationText.setDepth(200);
+    
+    // 一定時間後に通知を削除
+    this.time.delayedCall(duration, () => {
+      if (this.notificationText) {
+        this.notificationText.destroy();
+        this.notificationText = null;
+      }
+    });
   }
 }
