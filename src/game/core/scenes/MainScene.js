@@ -6,6 +6,8 @@ import CharacterFactory from '../factories/CharacterFactory';
 import ItemFactory from '../factories/ItemFactory';
 import ActionFactory from '../factories/ActionFactory';
 import SkillTreeManager from '../skills/core/SkillTreeManager';
+import { PlayerStats } from '../data/PlayerStats';
+import { Game } from '../core/Game';
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
@@ -209,13 +211,19 @@ export default class MainScene extends Phaser.Scene {
     const startPosition = this.isometricMap.getRandomWalkablePosition();
     const worldPos = this.isometricMap.tileToWorldXY(startPosition.x, startPosition.y);
     
+    // PlayerStatsから保存済みのプレイヤーレベルを取得
+    const playerStats = PlayerStats.getInstance();
+    const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
+    const playerClass = this.gameData.playerClass || 'warrior';
+    
     // プレイヤーキャラクターの作成
     this.player = this.characterFactory.createPlayer({
       scene: this,
       x: worldPos.x,
       y: worldPos.y,
-      level: this.gameData.playerLevel || 1,
-      classType: this.gameData.playerClass || 'warrior'
+      level: playerLevel,
+      classType: playerClass,
+      name: playerStats.name || 'プレイヤー'
     });
     
     // プレイヤーをシーンに追加
@@ -228,6 +236,14 @@ export default class MainScene extends Phaser.Scene {
     
     // プレイヤー作成イベント
     this.events.emit('player-created', this.player);
+    
+    // 通知: プレイヤーデータを復元
+    if (playerStats.level > 1) {
+      const uiScene = this.scene.get('UIScene');
+      if (uiScene && uiScene.showMessage) {
+        uiScene.showMessage('プレイヤーデータを復元しました');
+      }
+    }
   }
   
   /**
@@ -768,14 +784,60 @@ export default class MainScene extends Phaser.Scene {
   /**
    * ゲームオーバー処理
    */
-  gameOver() {
+  gameOver(data = {}) {
     // ゲームオーバー時の処理
     this.events.emit('game-over');
     
+    // プレイヤーデータを保存
+    if (this.player && this.player.onGameSave) {
+      this.player.onGameSave();
+    }
+    
     // ゲームオーバー画面表示
-    const uiScene = this.scene.get('UIScene');
-    if (uiScene && uiScene.showGameOver) {
-      uiScene.showGameOver();
+    if (this.scene) {
+      this.scene.start('GameOverScene', data);
     }
   }
+
+  /**
+   * ゲームの保存
+   */
+  saveGame() {
+    try {
+      // プレイヤーデータの保存
+      let saveData = {};
+      
+      if (this.player && this.player.onGameSave) {
+        saveData.playerData = this.player.onGameSave();
+      }
+      
+      // ゲーム状態の保存
+      saveData.gameState = {
+        currentLevel: this.gameData.currentLevel,
+        difficulty: this.gameData.difficulty,
+        mapType: this.currentMapType,
+        timestamp: Date.now()
+      };
+      
+      // ゲームインスタンスを取得してセーブ
+      const game = Game.getInstance();
+      if (game && game.saveGameData) {
+        game.saveGameData('auto', saveData);
+        
+        // 保存通知
+        const uiScene = this.scene.get('UIScene');
+        if (uiScene && uiScene.showMessage) {
+          uiScene.showMessage('ゲームを保存しました');
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('ゲームの保存に失敗しました:', error);
+      return false;
+    }
+  }
+  
 }

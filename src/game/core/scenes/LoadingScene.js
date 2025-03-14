@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
+import AssetPipeline from '../core/AssetPipeline';
+import { SCENES } from '../core/constants';
 
 /**
  * LoadingScene - ゲームアセットの読み込みを担当するシーン
  */
 export default class LoadingScene extends Phaser.Scene {
   constructor() {
-    super({ key: 'LoadingScene' });
+    super({ key: SCENES.LOADING });
     
     this.loadingText = null;
     this.progressBar = null;
@@ -95,6 +97,11 @@ export default class LoadingScene extends Phaser.Scene {
           key: 'effects_sheet', 
           path: 'assets/images/effects/effects_sheet.png',
           frameConfig: { frameWidth: 64, frameHeight: 64 }
+        },
+        {
+          key: 'particle',
+          path: 'assets/images/effects/particle.png',
+          frameConfig: { frameWidth: 8, frameHeight: 8 }
         }
       ],
       
@@ -105,12 +112,18 @@ export default class LoadingScene extends Phaser.Scene {
         { key: 'bgm_town', path: 'assets/audio/bgm_town.mp3' },
         { key: 'sfx_attack', path: 'assets/audio/sfx_attack.mp3' },
         { key: 'sfx_spell', path: 'assets/audio/sfx_spell.mp3' },
-        { key: 'sfx_item', path: 'assets/audio/sfx_item.mp3' }
+        { key: 'sfx_item', path: 'assets/audio/sfx_item.mp3' },
+        { key: 'click-sfx', path: 'assets/audio/click.mp3' },
+        { key: 'hover-sfx', path: 'assets/audio/hover.mp3' },
+        { key: 'game_over', path: 'assets/audio/game_over.mp3' }
       ],
       
       // その他
       others: []
     };
+    
+    // アセットパイプライン
+    this.assetPipeline = null;
   }
   
   preload() {
@@ -126,12 +139,17 @@ export default class LoadingScene extends Phaser.Scene {
   }
   
   create() {
+    console.log('LoadingScene: create');
+    
     // アニメーションの作成（キャラクターなど）
     this.createAnimations();
     
+    // アセットパイプラインの初期化
+    this.initializeAssetPipeline();
+    
     // 短い遅延後にメニューシーンへ移動
     this.time.delayedCall(500, () => {
-      this.scene.start('MenuScene');
+      this.scene.start(SCENES.MAIN_MENU);
     });
   }
   
@@ -315,13 +333,24 @@ export default class LoadingScene extends Phaser.Scene {
   }
   
   /**
-   * 2次元配列の作成
-   * @param {number} width - 幅
-   * @param {number} height - 高さ
-   * @param {any} defaultValue - デフォルト値
-   * @returns {Array} 2次元配列
+   * アセットパイプラインの初期化
    */
-  create2DArray(width, height, defaultValue) {
-    return Array(height).fill().map(() => Array(width).fill(defaultValue));
+  initializeAssetPipeline() {
+    try {
+      // アセットパイプラインの作成と初期化
+      this.assetPipeline = new AssetPipeline(this);
+      const initialized = this.assetPipeline.initialize();
+      
+      // 初期化が成功したら、ゲームデータに設定
+      if (initialized) {
+        // ゲームデータを取得（存在しなければ作成）
+        this.registry.set('assetPipeline', this.assetPipeline);
+        console.log('LoadingScene: AssetPipeline initialized and registered.');
+      } else {
+        console.error('LoadingScene: Failed to initialize AssetPipeline.');
+      }
+    } catch (error) {
+      console.error('LoadingScene: Error initializing AssetPipeline:', error);
+    }
   }
 }

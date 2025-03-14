@@ -1,9 +1,13 @@
 import Character from './Character';
 import Inventory from '../core/Inventory';
+import { PlayerStats } from '../data/PlayerStats';
 
 export default class Player extends Character {
   constructor(scene, x, y, texture, config = {}) {
     super(scene, x, y, texture, config);
+    
+    // PlayerStatsシングルトンの取得
+    this.playerStats = PlayerStats.getInstance();
     
     // プレイヤー固有のプロパティ
     this.maxPotion = config.maxPotion || 10;
@@ -17,12 +21,11 @@ export default class Player extends Character {
       maxSize: 40
     });
     
-    // 経験値関連
-    this.experience = config.experience || 0;
-    this.nextLevelExperience = this.calculateNextLevelExperience();
+    // PlayerStatsからデータをロード（もしあれば）
+    this.loadFromPlayerStats();
     
     // スキルポイント
-    this.skillPoints = config.skillPoints || 0;
+    this.skillPoints = this.playerStats.skillPoints || config.skillPoints || 0;
     
     // アクティブキーバインド（1-9キーに割り当てられたスキル）
     this.activeSkills = Array(9).fill(null);
@@ -37,6 +40,91 @@ export default class Player extends Character {
     if (scene.cameras && scene.cameras.main) {
       scene.cameras.main.startFollow(this);
     }
+    
+    // プレイタイム計測用
+    this.startPlayTime = Date.now();
+  }
+  
+  /**
+   * PlayerStatsからデータをロード
+   */
+  loadFromPlayerStats() {
+    // 基本情報の取得
+    if (this.playerStats.name) this.name = this.playerStats.name;
+    if (this.playerStats.level > 1) this.level = this.playerStats.level;
+    
+    // 経験値関連
+    this.experience = this.playerStats.experience || 0;
+    this.nextLevelExperience = this.calculateNextLevelExperience();
+    
+    // ステータス
+    if (this.playerStats.strength) this.strength = this.playerStats.strength;
+    if (this.playerStats.dexterity) this.dexterity = this.playerStats.dexterity;
+    if (this.playerStats.intelligence) this.intelligence = this.playerStats.intelligence;
+    if (this.playerStats.vitality) this.vitality = this.playerStats.vitality;
+    
+    // 体力とマナ
+    this.recalculateStats();
+    if (this.playerStats.health) this.life = this.playerStats.health;
+    if (this.playerStats.mana) this.mana = this.playerStats.mana;
+    
+    // ポーション
+    if (this.playerStats.potionCount !== undefined) this.potionCount = this.playerStats.potionCount;
+    if (this.playerStats.maxPotion) this.maxPotion = this.playerStats.maxPotion;
+    
+    // ゴールド
+    this.gold = this.playerStats.inventory?.gold || 0;
+    
+    // スキル
+    this.skills = this.playerStats.skills?.length > 0 ? [...this.playerStats.skills] : [];
+    
+    // その他のデータ
+    console.log('Loaded player data from PlayerStats');
+  }
+  
+  /**
+   * PlayerStatsにデータを保存
+   */
+  saveToPlayerStats() {
+    // 基本情報の保存
+    this.playerStats.name = this.name;
+    this.playerStats.level = this.level;
+    
+    // 経験値関連
+    this.playerStats.experience = this.experience;
+    this.playerStats.experienceToNextLevel = this.nextLevelExperience;
+    
+    // ステータス
+    this.playerStats.strength = this.strength;
+    this.playerStats.dexterity = this.dexterity;
+    this.playerStats.intelligence = this.intelligence || this.energy; // 互換性のため
+    this.playerStats.vitality = this.vitality;
+    
+    // 体力とマナ
+    this.playerStats.health = this.life;
+    this.playerStats.maxHealth = this.maxLife;
+    this.playerStats.mana = this.mana;
+    this.playerStats.maxMana = this.maxMana;
+    
+    // ポーション
+    this.playerStats.potionCount = this.potionCount;
+    this.playerStats.maxPotion = this.maxPotion;
+    
+    // スキルポイント
+    this.playerStats.skillPoints = this.skillPoints;
+    
+    // 統計情報
+    this.playerStats.playTime += Date.now() - this.startPlayTime;
+    this.startPlayTime = Date.now(); // リセット
+    
+    // インベントリ情報
+    if (!this.playerStats.inventory) this.playerStats.inventory = {};
+    this.playerStats.inventory.gold = this.gold;
+    
+    // スキル
+    this.playerStats.skills = [...this.skills];
+    
+    console.log('Saved player data to PlayerStats');
   }
   
   // 次のレベルアップに必要な経験値の計算
@@ -47,6 +135,15 @@ export default class Player extends Character {
   
   // 初期スキルの設定
   setupInitialSkills() {
+    // すでにスキルがある場合はスキップ
+    if (this.skills && this.skills.length > 0) {
+      // アクティブスキルにセット
+      for (let i = 0; i < this.skills.length && i < 9; i++) {
+        this.activeSkills[i] = this.skills[i];
+      }
+      return;
+    }
+    
     // クラスごとの初期スキル
     const initialSkills = {
       warrior: [
@@ -151,6 +248,9 @@ export default class Player extends Character {
     for (let i = 0; i < this.skills.length && i < 9; i++) {
       this.activeSkills[i] = this.skills[i];
     }
+    
+    // PlayerStatsにも保存
+    this.playerStats.skills = [...this.skills];
   }
   
   // キーボードイベントリスナーのセットアップ
@@ -216,6 +316,9 @@ export default class Player extends Character {
     
     // ポーションを使用
     this.potionCount--;
+    
+    // PlayerStatsの更新
+    this.playerStats.potionCount = this.potionCount;
     
     // 回復量の計算（レベルによってボーナス）
     const healAmount = Math.floor(this.potionRegenerationValue * (1 + this.level * 0.05));
@@ -292,6 +395,9 @@ export default class Player extends Character {
     // 経験値を加算
     this.experience += amount;
     
+    // PlayerStatsの更新
+    this.playerStats.experience = this.experience;
+    
     // レベルアップ判定
     while (this.experience >= this.nextLevelExperience) {
       // 余剰経験値を計算
@@ -302,6 +408,10 @@ export default class Player extends Character {
       
       // 次のレベルの必要経験値を計算
       this.nextLevelExperience = this.calculateNextLevelExperience();
+      
+      // PlayerStatsの更新
+      this.playerStats.experience = this.experience;
+      this.playerStats.experienceToNextLevel = this.nextLevelExperience;
     }
     
     // 経験値獲得表示
@@ -351,6 +461,16 @@ export default class Player extends Character {
     // スキルポイントの獲得
     this.skillPoints += 1;
     
+    // PlayerStatsの更新
+    this.playerStats.level = this.level;
+    this.playerStats.skillPoints = this.skillPoints;
+    this.playerStats.strength = this.strength;
+    this.playerStats.dexterity = this.dexterity;
+    this.playerStats.intelligence = this.intelligence || this.energy;
+    this.playerStats.vitality = this.vitality;
+    this.playerStats.maxHealth = this.maxLife;
+    this.playerStats.maxMana = this.maxMana;
+    
     // UIの更新
     const uiScene = this.scene.scene.get('UIScene');
     if (uiScene && uiScene.updateSkillPoints) {
@@ -376,6 +496,10 @@ export default class Player extends Character {
     
     // スキルポイントを消費
     this.skillPoints -= 1;
+    
+    // PlayerStatsの更新
+    this.playerStats.skills = [...this.skills];
+    this.playerStats.skillPoints = this.skillPoints;
     
     // 空いているスロットにセット
     const emptySlot = this.activeSkills.findIndex(s => s === null);
@@ -430,6 +554,10 @@ export default class Player extends Character {
     // スキルポイントを消費
     this.skillPoints -= 1;
     
+    // PlayerStatsの更新
+    this.playerStats.skills = [...this.skills];
+    this.playerStats.skillPoints = this.skillPoints;
+    
     // UI更新
     const uiScene = this.scene.scene.get('UIScene');
     if (uiScene) {
@@ -467,7 +595,14 @@ export default class Player extends Character {
   collectItem(item) {
     if (!item) return false;
     
-    return item.onCollect(this);
+    const result = item.onCollect(this);
+    
+    // 成功した場合、PlayerStatsを更新
+    if (result) {
+      this.saveToPlayerStats();
+    }
+    
+    return result;
   }
   
   // アイテムの装備
@@ -475,7 +610,14 @@ export default class Player extends Character {
     if (!item) return false;
     
     if (item.constructor.name === 'Equipment') {
-      return item.equip(this);
+      const result = item.equip(this);
+      
+      // 成功した場合、PlayerStatsを更新
+      if (result) {
+        this.saveToPlayerStats();
+      }
+      
+      return result;
     }
     
     return false;
@@ -494,6 +636,10 @@ export default class Player extends Character {
     if (added) {
       this.characterEquipments[slot] = null;
       this.recalculateStats();
+      
+      // PlayerStatsの更新
+      this.saveToPlayerStats();
+      
       return true;
     }
     
@@ -505,6 +651,11 @@ export default class Player extends Character {
     if (!this.gold) this.gold = 0;
     
     this.gold += amount;
+    
+    // PlayerStatsの更新
+    if (!this.playerStats.inventory) this.playerStats.inventory = {};
+    this.playerStats.inventory.gold = this.gold;
+    this.playerStats.goldCollected += amount;
     
     // ゴールド取得エフェクト
     this.showGoldGainEffect(amount);
@@ -590,18 +741,57 @@ export default class Player extends Character {
     super.update(time, delta);
     
     // プレイヤー特有の更新処理
+    // 定期的にPlayerStatsを更新
+    if (time % 60000 < delta) { // 約1分ごとに更新
+      this.saveToPlayerStats();
+    }
   }
   
   // 死亡処理のオーバーライド
   die(killer = null) {
+    if (this.isDead) return;
+    
     super.die(killer);
+    
+    // 死亡統計の更新
+    this.playerStats.deaths += 1;
+    this.playerStats.playTime += Date.now() - this.startPlayTime;
+    
+    // 死亡理由の取得
+    let deathReason = 'モンスターの攻撃による';
+    if (killer) {
+      if (killer.name) {
+        deathReason = `${killer.name}の攻撃による`;
+      }
+      if (killer.type === 'trap') {
+        deathReason = 'トラップによる';
+      }
+      if (killer.type === 'poison') {
+        deathReason = '毒による';
+      }
+    }
     
     // プレイヤー死亡時の特殊処理
     // ゲームオーバー画面表示など
     this.scene.time.delayedCall(3000, () => {
+      const gameOverData = {
+        deathReason: deathReason,
+        playTime: this.playerStats.playTime,
+        level: this.level,
+        gold: this.gold,
+        kills: this.playerStats.kills
+      };
+      
+      // UISceneに渡す
       const uiScene = this.scene.scene.get('UIScene');
       if (uiScene && uiScene.showGameOver) {
-        uiScene.showGameOver();
+        uiScene.showGameOver(gameOverData);
+      } else {
+        // または直接GameOverSceneに遷移
+        const game = this.scene.scene.game;
+        if (game && game.scene) {
+          game.scene.start('GameOverScene', gameOverData);
+        }
       }
     });
   }
@@ -610,6 +800,9 @@ export default class Player extends Character {
   addPotion(count = 1) {
     // 最大値を超えないように調整
     this.potionCount = Math.min(this.maxPotion, this.potionCount + count);
+    
+    // PlayerStatsの更新
+    this.playerStats.potionCount = this.potionCount;
     
     // UI更新
     const uiScene = this.scene.scene.get('UIScene');
@@ -624,6 +817,9 @@ export default class Player extends Character {
   increaseMaxPotion(count = 1) {
     this.maxPotion += count;
     
+    // PlayerStatsの更新
+    this.playerStats.maxPotion = this.maxPotion;
+    
     // UI更新
     const uiScene = this.scene.scene.get('UIScene');
     if (uiScene && uiScene.updatePotionCounter) {
@@ -631,5 +827,12 @@ export default class Player extends Character {
     }
     
     return true;
+  }
+  
+  // ゲーム保存時に呼ばれるメソッド
+  onGameSave() {
+    // 最新のデータをPlayerStatsに保存
+    this.saveToPlayerStats();
+    return this.playerStats.toJSON();
   }
 }

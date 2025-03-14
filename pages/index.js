@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import styles from '../styles/Home.module.css';
-import gameInstance from '../src/game/core/Game';
+import { Game } from '../src/game/core/Game';
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
@@ -10,6 +10,9 @@ export default function Home() {
   const gameInitialized = useRef(false);
 
   useEffect(() => {
+    // ゲームインスタンスを取得
+    const gameInstance = Game.getInstance();
+    
     // ゲームUI要素を追加
     const gameUI = document.createElement('div');
     gameUI.id = 'game-ui';
