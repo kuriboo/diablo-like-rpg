@@ -1,0 +1,143 @@
+.container {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #000;
+    overflow: hidden;
+    position: relative;
+}
+  
+.main {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+  
+.gameContainer {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+  
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    background-color: #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+}
+  
+.loading h2 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+  
+.loading:after {
+    content: '';
+    width: 50px;
+    height: 50px;
+    border: 5px solid #333;
+    border-top: 5px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+  
+.error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #ff3333;
+    background-color: #000;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    padding: 20px;
+    text-align: center;
+}
+  
+.error h2 {
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+  
+.error p {
+    margin-bottom: 20px;
+    max-width: 600px;
+}
+  
+.error button {
+    background-color: #333;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+  
+.error button:hover {
+    background-color: #555;
+}
+  
+.gameUI {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+  
+.gameUIInteractive {
+    pointer-events: auto;
+}
+  
+.fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+  
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+  
+/* メディアクエリ: 小さい画面での調整 */
+@media (max-width: 768px) {
+    .loading h2, .error h2 {
+        font-size: 20px;
+    }
+    
+    .error p {
+        font-size: 14px;
+    }
+    
+    .error button {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+}

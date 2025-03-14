@@ -1,0 +1,109 @@
+html,
+body {
+  padding: 0;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+  background-color: #000;
+  color: #fff;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: #0070f3;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Phaserゲームキャンバス用スタイル */
+canvas {
+  display: block;
+  margin: 0 auto;
+  image-rendering: optimizeSpeed;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -o-crisp-edges;
+  image-rendering: pixelated;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+
+/* ゲームコンテナのスタイル */
+#game-container {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ゲームUI要素 */
+#game-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#game-ui button,
+#game-ui input,
+#game-ui select {
+  pointer-events: auto;
+}
+
+/* フォーカス時の輪郭線を非表示 */
+*:focus {
+  outline: none;
+}
+
+/* スクロールバー非表示 */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* 選択を無効化 */
+.no-select {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* アプリケーション全体に適用される暗いテーマ */
+:root {
+  --primary-color: #7e57c2;
+  --secondary-color: #ff9800;
+  --background-dark: #121212;
+  --background-medium: #1e1e1e;
+  --background-light: #2d2d2d;
+  --text-light: #ffffff;
+  --text-medium: #bbbbbb;
+  --text-dark: #777777;
+  --border-color: #333333;
+  --success-color: #4caf50;
+  --error-color: #f44336;
+  --warning-color: #ff9800;
+}
+
+/* フルスクリーンモードのスタイル */
+body.fullscreen-mode {
+  overflow: hidden;
+}
+
+/* モバイル向け調整 */
+@media (max-width: 768px) {
+  html, body {
+    font-size: 14px;
+  }
+}

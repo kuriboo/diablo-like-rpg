@@ -248,15 +248,27 @@ class Game {
     return false;
   }
 
-  /**
-   * ゲームデータをローカルストレージに保存
+   /**
+   * ゲームデータを保存
    * @param {number} slot - セーブスロット
    * @param {object} data - 保存するデータ
+   * @returns {boolean} 保存成功かどうか
    */
-  saveGameData(slot, data) {
+   saveGameData(slot, data) {
     try {
-      localStorage.setItem(`diablo_rpg_save_${slot}`, JSON.stringify(data));
-      return true;
+      // Electronかブラウザかでストレージメソッドを切り替え
+      if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.isElectron) {
+        // asyncメソッドだがここではsyncで扱う
+        window.electronAPI.saveGame({
+          ...data,
+          saveSlot: slot
+        });
+        return true;
+      } else {
+        // ブラウザ環境（ローカルストレージ使用）
+        localStorage.setItem(`diablo_rpg_save_${slot}`, JSON.stringify(data));
+        return true;
+      }
     } catch (error) {
       console.error('Error saving game data:', error);
       return false;
@@ -264,14 +276,22 @@ class Game {
   }
 
   /**
-   * ローカルストレージからゲームデータを読み込み
+   * ゲームデータを読み込み
    * @param {number} slot - セーブスロット
    * @returns {object|null} 読み込んだデータ、またはnull
    */
   loadGameData(slot) {
     try {
-      const savedData = localStorage.getItem(`diablo_rpg_save_${slot}`);
-      return savedData ? JSON.parse(savedData) : null;
+      // Electronかブラウザかでストレージメソッドを切り替え
+      if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.isElectron) {
+        // asyncメソッドだが、index.jsでオーバーライドされるためここではダミー実装
+        console.log('Loading game from Electron API (this should be overridden)');
+        return null;
+      } else {
+        // ブラウザ環境（ローカルストレージ使用）
+        const savedData = localStorage.getItem(`diablo_rpg_save_${slot}`);
+        return savedData ? JSON.parse(savedData) : null;
+      }
     } catch (error) {
       console.error('Error loading game data:', error);
       return null;

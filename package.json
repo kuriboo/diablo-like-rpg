@@ -1,56 +1,67 @@
 {
     "name": "diablo-like-rpg",
     "version": "0.1.0",
-    "description": "アイソメトリックアクションRPG",
+    "private": true,
     "main": "electron/main.js",
+    "author": "Your Name",
+    "description": "An isometric action RPG game inspired by Diablo",
     "scripts": {
         "dev": "next dev",
-        "build": "next build",
+        "build": "next build && next export",
         "start": "next start",
-        "electron": "electron .",
-        "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-        "package": "next build && electron-builder"
+        "lint": "next lint",
+        "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+        "electron:build": "npm run build && electron-builder",
+        "electron:start": "electron ."
     },
     "dependencies": {
-        "@tensorflow/tfjs": "^4.12.0",
+        "@tensorflow/tfjs": "^4.22.0",
         "electron-is-dev": "^2.0.0",
-        "next": "^14.0.0",
-        "phaser": "^3.60.0",
+        "next": "^12.1.0",
+        "phaser": "^3.55.2",
         "phaser3-plugin-isometric": "^0.0.7",
-        "react": "^18.2.0",
-        "react-dom": "^18.2.0",
+        "react": "^17.0.2",
+        "react-dom": "^17.0.2",
         "reactflow": "^11.10.0",
         "simplex-noise": "^4.0.1",
-        "uuid": "^9.0.1",
-        "zustand": "^4.4.3"
+        "uuid": "^9.0.0"
     },
     "devDependencies": {
-        "concurrently": "^8.2.2",
-        "electron": "^27.0.0",
-        "electron-builder": "^24.6.4",
-        "wait-on": "^7.0.1"
+        "concurrently": "^7.0.0",
+        "electron": "^16.0.0",
+        "electron-builder": "^23.0.0",
+        "eslint": "^8.10.0",
+        "eslint-config-next": "^12.1.0",
+        "wait-on": "^6.0.0"
     },
     "build": {
         "appId": "com.example.diablo-like-rpg",
-        "productName": "DiabloLikeRPG",
+        "productName": "Diablo-Like RPG",
         "files": [
-            "!node_modules/**/*",
             "electron/**/*",
-            "public/**/*",
-            ".next/**/*",
+            "out/**/*",
             "package.json"
         ],
-        "extraMetadata": {
-            "main": "electron/main.js"
-        },
-        "win": {
-            "target": "nsis"
+        "directories": {
+            "buildResources": "resources",
+            "output": "dist"
         },
         "mac": {
-            "target": "dmg"
+            "category": "public.app-category.games",
+            "target": [
+                "dmg"
+            ]
+        },
+        "win": {
+            "target": [
+                "nsis"
+            ]
         },
         "linux": {
-            "target": "AppImage"
+            "target": [
+                "AppImage"
+            ],
+            "category": "Game"
         }
     }
 }
