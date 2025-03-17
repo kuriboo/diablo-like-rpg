@@ -203,13 +203,16 @@ export default class Action {
       // 範囲条件（対象が一定範囲内にいるか）
       case 'range':
         if (!this.target) return false;
-        
+      
         const distance = Phaser.Math.Distance.Between(
           this.owner.x, this.owner.y,
           this.target.x, this.target.y
         );
         
-        return distance <= condition.value;
+        // タイルサイズを考慮した距離計算（TopDownMapがあれば）
+        const tileSize = this.scene?.topDownMap?.tileSize || 32;
+        
+        return distance <= condition.value * tileSize;
       
       // カスタム条件（関数で指定）
       case 'custom':
@@ -246,14 +249,12 @@ export default class Action {
     const dx = this.target.x - this.owner.x;
     const dy = this.target.y - this.owner.y;
     
-    // 角度を計算（ラジアン）
-    const angle = Math.atan2(dy, dx);
-    
-    // 8方向に変換
-    const directions = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
-    const index = Math.round(angle / (Math.PI * 2 / 8) + 8) % 8;
-    
-    return directions[index];
+    // トップダウン向けに4方向に単純化
+    if (Math.abs(dx) > Math.abs(dy)) {
+      return dx > 0 ? 'right' : 'left';
+    } else {
+      return dy > 0 ? 'down' : 'up';
+    }
   }
   
   // 所有者と位置間の方向を取得
@@ -263,14 +264,12 @@ export default class Action {
     const dx = this.position.x - this.owner.x;
     const dy = this.position.y - this.owner.y;
     
-    // 角度を計算（ラジアン）
-    const angle = Math.atan2(dy, dx);
-    
-    // 8方向に変換
-    const directions = ['right', 'down-right', 'down', 'down-left', 'left', 'up-left', 'up', 'up-right'];
-    const index = Math.round(angle / (Math.PI * 2 / 8) + 8) % 8;
-    
-    return directions[index];
+    // トップダウン向けに4方向に単純化
+    if (Math.abs(dx) > Math.abs(dy)) {
+      return dx > 0 ? 'right' : 'left';
+    } else {
+      return dy > 0 ? 'down' : 'up';
+    }
   }
   
   // 所有者の向きを対象に向ける

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
-import AssetPipeline from '../core/AssetPipeline';
-import { SCENES } from '../core/constants';
+import AssetPipeline from '../AssetPipeline';
+import { SCENES } from '../constants';
+import PlaceholderAssets from '../../../debug/PlaceholderAssets';
+import { isDebugMode } from '../../../debug';
 
 /**
  * LoadingScene - ゲームアセットの読み込みを担当するシーン
@@ -129,6 +131,12 @@ export default class LoadingScene extends Phaser.Scene {
   preload() {
     // プログレスバーとテキストの初期設定
     this.setupProgressBar();
+
+     // デバッグモードの場合、プレースホルダーアセットを初期化
+    if (isDebugMode) {
+      console.log('デバッグモード: プレースホルダーアセットを初期化中...');
+      PlaceholderAssets.initialize(this);
+    }
     
     // アセットの読み込み
     this.loadAssets();
@@ -210,6 +218,27 @@ export default class LoadingScene extends Phaser.Scene {
         this.load.atlas(asset.key, asset.imagePath, asset.jsonPath);
       }
     });
+
+    // デバッグモードでエラー表示を少なくする（アセット不足対策）
+    if (isDebugMode) {
+      // アセット読み込みエラーのハンドリング
+      this.load.on('loaderror', (fileObj) => {
+        console.warn(`⚠️ アセット読み込みエラー: ${fileObj.key} - プレースホルダーを使用します`);
+        
+        // アセットタイプに基づいてプレースホルダーを生成
+        if (fileObj.key.includes('player')) {
+          PlaceholderAssets.getFallbackTexture(this, 'player');
+        } else if (fileObj.key.includes('enemy')) {
+          PlaceholderAssets.getFallbackTexture(this, 'enemy');
+        } else if (fileObj.key.includes('tile')) {
+          PlaceholderAssets.getFallbackTexture(this, 'tile');
+        } else if (fileObj.key.includes('item')) {
+          PlaceholderAssets.getFallbackTexture(this, 'item');
+        } else {
+          PlaceholderAssets.getFallbackTexture(this, 'character');
+        }
+      });
+    }
   }
   
   /**

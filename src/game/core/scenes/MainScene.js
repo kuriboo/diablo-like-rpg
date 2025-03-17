@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
-import Player from '../characters/Player';
-import IsometricMap from '../map/IsometricMap';
-import MapGenerator from '../map/MapGenerator';
-import CharacterFactory from '../factories/CharacterFactory';
-import ItemFactory from '../factories/ItemFactory';
-import ActionFactory from '../factories/ActionFactory';
-import SkillTreeManager from '../skills/core/SkillTreeManager';
-import { PlayerStats } from '../data/PlayerStats';
-import { Game } from '../core/Game';
+import TopDownMap from '.././../map/TopDownMap';
+import MapGenerator from '.././../map/MapGenerator';
+import CharacterFactory from '../../factories/CharacterFactory';
+import ItemFactory from '../../factories/ItemFactory';
+import ActionFactory from '../../factories/ActionFactory';
+import SkillTreeManager from '../../skills/core/SkillTreeManager';
+import { PlayerStats } from '../../data/PlayerStats';
+import { Game } from '../../core/Game';
+import Debug from '../../../debug';
+import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
@@ -19,7 +20,7 @@ export default class MainScene extends Phaser.Scene {
     this.enemies = [];
     this.npcs = [];
     this.items = [];
-    this.isometricMap = null;
+    this.topDownMap = null; // isometricMapからtopDownMapに変更
     this.mapGenerator = null;
     
     // ファクトリーのインスタンス
@@ -51,6 +52,9 @@ export default class MainScene extends Phaser.Scene {
     
     // スキルツリーマネージャーの初期化
     this.skillTreeManager = new SkillTreeManager();
+
+    // デバッグフラグ
+    this.isDebugMode = process.env.NODE_ENV !== 'production';
   }
   
   preload() {
@@ -61,7 +65,7 @@ export default class MainScene extends Phaser.Scene {
   async create() {
     console.log('MainScene: create');
     
-    // マップジェネレーターの作成
+    // マップジェネレーターの作成（そのまま）
     this.mapGenerator = new MapGenerator({
       width: 50,
       height: 50,
@@ -69,10 +73,10 @@ export default class MainScene extends Phaser.Scene {
       difficultyLevel: this.gameData.difficulty
     });
     
-    // アイソメトリックマップの作成
-    this.isometricMap = new IsometricMap({
+    // TopDownMapの作成（タイルサイズを32x32に変更）
+    this.topDownMap = new TopDownMap({
       scene: this,
-      tileSize: { width: 64, height: 32 }
+      tileSize: 32 // 正方形のタイルサイズに変更
     });
     
     // マップの生成
@@ -107,6 +111,18 @@ export default class MainScene extends Phaser.Scene {
       this.fpsText.setScrollFactor(0);
       this.fpsText.setDepth(999);
     }
+
+     // デバッグモードの初期化
+    if (this.isDebugMode) {
+      Debug.initialize(this);
+      
+      // ゲームの状態をコンソールに出力
+      console.log('🎮 ゲーム状態:', {
+        mapType: this.currentMapType,
+        level: this.gameData.currentLevel,
+        difficulty: this.gameData.difficulty
+      });
+    }
   }
   
   update(time, delta) {
@@ -116,8 +132,8 @@ export default class MainScene extends Phaser.Scene {
     }
     
     // マップの更新
-    if (this.isometricMap) {
-      this.isometricMap.update();
+    if (this.topDownMap) {
+      this.topDownMap.update();
     }
     
     // プレイヤーの更新
@@ -151,12 +167,27 @@ export default class MainScene extends Phaser.Scene {
       
       // マップを生成
       const mapData = await this.mapGenerator.generateMap(this.currentMapType);
+
+      // マップ生成に失敗した場合や開発中の場合はダミーマップを使用
+      if (!mapData && this.isDebugMode) {
+        console.log('🗺️ ダミーマップを生成します');
+        
+        // DebugUtilsのgenerateMapData関数を使用
+        const dummyMapData = generateMapData(80, 100, this.currentMapType);
+        this.topDownMap.setMapData(dummyMapData);
+        
+        // オブジェクトを配置
+        this.topDownMap.placeObjects();
+        
+        console.log(`🗺️ ダミーマップ生成完了: ${this.currentMapType}`);
+        return true;
+      }
       
-      // 生成したマップをIsometricMapに設定
-      this.isometricMap.setMapData(mapData);
+      // 生成したマップをTopDownMapに設定
+      this.topDownMap.setMapData(mapData);
       
       // オブジェクトを配置
-      this.isometricMap.placeObjects();
+      this.topDownMap.placeObjects();
       
       console.log(`Map generated: ${this.currentMapType}`);
       
@@ -207,41 +238,71 @@ export default class MainScene extends Phaser.Scene {
    * プレイヤーの作成
    */
   createPlayer() {
-    // プレイヤーのスタート位置を移動可能な場所から取得
-    const startPosition = this.isometricMap.getRandomWalkablePosition();
-    const worldPos = this.isometricMap.tileToWorldXY(startPosition.x, startPosition.y);
-    
-    // PlayerStatsから保存済みのプレイヤーレベルを取得
-    const playerStats = PlayerStats.getInstance();
-    const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
-    const playerClass = this.gameData.playerClass || 'warrior';
-    
-    // プレイヤーキャラクターの作成
-    this.player = this.characterFactory.createPlayer({
-      scene: this,
-      x: worldPos.x,
-      y: worldPos.y,
-      level: playerLevel,
-      classType: playerClass,
-      name: playerStats.name || 'プレイヤー'
-    });
-    
-    // プレイヤーをシーンに追加
-    this.add.existing(this.player);
-    
-    // デプスソート用配列に追加
-    if (this.isometricMap) {
-      this.isometricMap.addToDepthSortedObjects(this.player);
-    }
-    
-    // プレイヤー作成イベント
-    this.events.emit('player-created', this.player);
-    
-    // 通知: プレイヤーデータを復元
-    if (playerStats.level > 1) {
-      const uiScene = this.scene.get('UIScene');
-      if (uiScene && uiScene.showMessage) {
-        uiScene.showMessage('プレイヤーデータを復元しました');
+    try {
+      // プレイヤーのスタート位置を移動可能な場所から取得
+      const startPosition = this.topDownMap.getRandomWalkablePosition();
+      const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
+      
+      // PlayerStatsから保存済みのプレイヤーレベルを取得
+      const playerStats = PlayerStats.getInstance();
+      const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
+      const playerClass = this.gameData.playerClass || 'warrior';
+      
+      // プレイヤーキャラクターの作成
+      this.player = this.characterFactory.createPlayer({
+        scene: this,
+        x: worldPos.x,
+        y: worldPos.y,
+        level: playerLevel,
+        classType: playerClass,
+        name: playerStats.name || 'プレイヤー'
+      });
+      
+      // プレイヤーをシーンに追加
+      this.add.existing(this.player);
+      
+      // デプスソートは不要になるためコメントアウトまたは削除
+      // TopDownでは単純なシーンのdepthプロパティで重なり順を制御
+      this.player.setDepth(10); // キャラクターの深度を設定
+      
+      // プレイヤー作成イベント
+      this.events.emit('player-created', this.player);
+      
+      // 通知: プレイヤーデータを復元
+      if (playerStats.level > 1) {
+        const uiScene = this.scene.get('UIScene');
+        if (uiScene && uiScene.showMessage) {
+          uiScene.showMessage('プレイヤーデータを復元しました');
+        }
+      }
+    } catch (error) {
+      if (this.isDebugMode) {
+        console.error('プレイヤー生成エラー、ダミーデータを使用します:', error);
+        
+        // プレイヤーのスタート位置を移動可能な場所から取得
+        const startPosition = this.topDownMap.getRandomWalkablePosition();
+        const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
+        
+        // ダミープレイヤーステータスの生成
+        const playerStats = generatePlayerStats('warrior', 5, 'デバッグプレイヤー');
+        
+        // プレイヤーキャラクターの作成
+        this.player = this.characterFactory.createPlayer({
+          scene: this,
+          x: worldPos.x,
+          y: worldPos.y,
+          level: playerStats.level,
+          classType: playerStats.classType,
+          name: playerStats.name,
+          stats: playerStats
+        });
+        
+        // 以下は通常の処理と同様...
+        this.add.existing(this.player);
+        this.player.setDepth(10);
+        this.events.emit('player-created', this.player);
+      } else {
+        throw error; // 本番環境ではエラーを伝播
       }
     }
   }
@@ -251,7 +312,7 @@ export default class MainScene extends Phaser.Scene {
    */
   createCompanion() {
     // プレイヤーの周辺で移動可能な場所を探す
-    const playerPos = this.isometricMap.worldToTileXY(this.player.x, this.player.y);
+    const playerPos = this.topDownMap.worldToTileXY(this.player.x, this.player.y);
     let companionPos = null;
     
     // プレイヤーの近くで移動可能な位置を探す
@@ -264,7 +325,7 @@ export default class MainScene extends Phaser.Scene {
       const x = playerPos.x + dir.dx;
       const y = playerPos.y + dir.dy;
       
-      if (this.isometricMap.isWalkableAt(x, y) && !this.isometricMap.hasEntityAt(x, y)) {
+      if (this.topDownMap.isWalkableAt(x, y) && !this.topDownMap.hasEntityAt(x, y)) {
         companionPos = { x, y };
         break;
       }
@@ -272,11 +333,11 @@ export default class MainScene extends Phaser.Scene {
     
     // 適切な位置が見つからなければランダムな位置を使用
     if (!companionPos) {
-      companionPos = this.isometricMap.getRandomWalkablePosition();
+      companionPos = this.topDownMap.getRandomWalkablePosition();
     }
     
     // ワールド座標に変換
-    const worldPos = this.isometricMap.tileToWorldXY(companionPos.x, companionPos.y);
+    const worldPos = this.topDownMap.tileToWorldXY(companionPos.x, companionPos.y);
     
     // コンパニオンの作成
     const companion = this.characterFactory.createCompanion({
@@ -293,10 +354,8 @@ export default class MainScene extends Phaser.Scene {
     // コンパニオンリストに追加
     this.companions.push(companion);
     
-    // デプスソート用配列に追加
-    if (this.isometricMap) {
-      this.isometricMap.addToDepthSortedObjects(companion);
-    }
+    // デプスの設定（デプスソートの代わり）
+    companion.setDepth(10);
     
     // コンパニオンにプレイヤーを認識させる
     if (companion.ai) {
@@ -308,11 +367,12 @@ export default class MainScene extends Phaser.Scene {
    * カメラの設定
    */
   setupCamera() {
-    // カメラの設定
+    // カメラの設定 - TopDownマップには追加のオフセットは不要
     if (this.player) {
       this.cameras.main.startFollow(this.player);
       this.cameras.main.setZoom(1);
-      this.cameras.main.setFollowOffset(-this.player.width / 2, -this.player.height / 2);
+      // アイソメトリックマップで必要だったオフセットは削除
+      // this.cameras.main.setFollowOffset(-this.player.width / 2, -this.player.height / 2);
     }
   }
   
@@ -398,11 +458,111 @@ export default class MainScene extends Phaser.Scene {
         await this.generateMap();
         
         // プレイヤーの位置をリセット
-        const startPosition = this.isometricMap.getRandomWalkablePosition();
-        const worldPos = this.isometricMap.tileToWorldXY(startPosition.x, startPosition.y);
+        const startPosition = this.topDownMap.getRandomWalkablePosition();
+        const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
         this.player.setPosition(worldPos.x, worldPos.y);
         
         console.log('Map regenerated');
+      });
+    }
+
+    // デバッグモード専用キー
+    if (this.isDebugMode) {
+
+      // MainScene.js setupEventListeners()メソッドにF1キーのイベント追加
+      this.input.keyboard.on('keydown-F1', () => {
+        Debug.DebugUtils.showDebugHelp(this);
+      });
+
+      // Nキー：デバッグNPC追加
+      this.input.keyboard.on('keydown-N', () => {
+        if (this.player && this.topDownMap) {
+          // プレイヤーの近くにNPCを配置
+          const playerPos = this.topDownMap.worldToTileXY(this.player.x, this.player.y);
+          let npcPos = { 
+            x: playerPos.x + 2, 
+            y: playerPos.y 
+          };
+          
+          if (!this.topDownMap.isWalkableAt(npcPos.x, npcPos.y)) {
+            // 移動可能な場所を探す
+            npcPos = this.topDownMap.getRandomWalkablePosition();
+          }
+          
+          // ワールド座標に変換
+          const worldPos = this.topDownMap.tileToWorldXY(npcPos.x, npcPos.y);
+          
+          // NPCの生成
+          const npcType = ['villager', 'guard', 'merchant', 'blacksmith', 'alchemist'][Math.floor(Math.random() * 5)];
+          const isShop = Math.random() < 0.5;
+          
+          const npc = this.characterFactory.createNPC({
+            scene: this,
+            x: worldPos.x,
+            y: worldPos.y,
+            type: npcType,
+            isShop: isShop,
+            dialogues: ['これはデバッグNPCです。', 'テスト用に生成されました。']
+          });
+          
+          if (isShop) {
+            // ショップアイテム生成
+            const shopType = ['weapon', 'armor', 'potion', 'general'][Math.floor(Math.random() * 4)];
+            npc.setShopType(shopType);
+            npc.setShopItems(Debug.DebugUtils.generateShopItems(shopType, 10));
+          }
+          
+          // シーンに追加
+          this.add.existing(npc);
+          if (!this.npcs) this.npcs = [];
+          this.npcs.push(npc);
+          
+          // デプスの設定
+          npc.setDepth(10);
+          
+          console.log(`🧙 デバッグNPC追加: ${npcType}${isShop ? ' (ショップ)' : ''}`);
+        }
+      });
+      
+      // Bキー：デバッグボス追加
+      this.input.keyboard.on('keydown-B', () => {
+        if (this.player && this.topDownMap) {
+          // プレイヤーから少し離れた場所にボスを配置
+          const playerPos = this.topDownMap.worldToTileXY(this.player.x, this.player.y);
+          let bossPos = { 
+            x: playerPos.x + 5, 
+            y: playerPos.y + 5 
+          };
+          
+          if (!this.topDownMap.isWalkableAt(bossPos.x, bossPos.y)) {
+            bossPos = this.topDownMap.getRandomWalkablePosition();
+          }
+          
+          // ワールド座標に変換
+          const worldPos = this.topDownMap.tileToWorldXY(bossPos.x, bossPos.y);
+          
+          // ボス敵の生成
+          const boss = this.characterFactory.createEnemy({
+            scene: this,
+            x: worldPos.x,
+            y: worldPos.y,
+            level: this.player.level + 2,
+            type: 'boss'
+          });
+          
+          // ボスのスケール調整
+          boss.setScale(1.5);
+          
+          // シーンに追加
+          this.add.existing(boss);
+          if (!this.enemies) this.enemies = [];
+          this.enemies.push(boss);
+          
+          // デプスの設定
+          boss.setDepth(10);
+          
+          console.log(`👹 デバッグボス追加: Lv.${boss.level}`);
+        }
       });
     }
   }
@@ -414,16 +574,16 @@ export default class MainScene extends Phaser.Scene {
     // クリック位置を取得
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     
-    // アイソメトリック座標に変換
-    const tileXY = this.isometricMap.worldToTileXY(worldPoint.x, worldPoint.y);
+    // トップダウン座標に変換
+    const tileXY = this.topDownMap.worldToTileXY(worldPoint.x, worldPoint.y);
     
     // 移動可能かチェック
-    if (this.isometricMap.isWalkableAt(tileXY.x, tileXY.y)) {
+    if (this.topDownMap.isWalkableAt(tileXY.x, tileXY.y)) {
       // プレイヤーの現在位置をタイル座標で取得
-      const playerTileXY = this.isometricMap.worldToTileXY(this.player.x, this.player.y);
+      const playerTileXY = this.topDownMap.worldToTileXY(this.player.x, this.player.y);
       
       // 経路を探索
-      const path = this.isometricMap.findPath(
+      const path = this.topDownMap.findPath(
         playerTileXY.x, playerTileXY.y,
         tileXY.x, tileXY.y
       );
@@ -443,7 +603,7 @@ export default class MainScene extends Phaser.Scene {
     const moveAction = this.actionFactory.createBasicAction('move', {
       owner: this.player,
       path: path,
-      isometricMap: this.isometricMap
+      topDownMap: this.topDownMap // isometricMapからtopDownMapに変更
     });
     
     // 移動アクション実行
@@ -459,11 +619,11 @@ export default class MainScene extends Phaser.Scene {
     // クリック位置を取得
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     
-    // アイソメトリック座標に変換
-    const tileXY = this.isometricMap.worldToTileXY(worldPoint.x, worldPoint.y);
+    // トップダウン座標に変換
+    const tileXY = this.topDownMap.worldToTileXY(worldPoint.x, worldPoint.y);
     
     // クリック位置にエンティティがあるかチェック
-    const entity = this.isometricMap.getEntityAt(tileXY.x, tileXY.y);
+    const entity = this.topDownMap.getEntityAt(tileXY.x, tileXY.y);
     
     if (entity) {
       // 敵の場合は攻撃
@@ -583,9 +743,9 @@ export default class MainScene extends Phaser.Scene {
       this.items.splice(index, 1);
     }
     
-    // デプスソート用配列から削除
-    if (this.isometricMap) {
-      this.isometricMap.removeFromDepthSortedObjects(item);
+    // エンティティリストから削除
+    if (this.topDownMap) {
+      this.topDownMap.removeEntity(item);
     }
     
     // アイテム取得イベント
@@ -757,16 +917,16 @@ export default class MainScene extends Phaser.Scene {
     await this.generateMap();
     
     // プレイヤーの位置をリセット
-    const startPosition = this.isometricMap.getRandomWalkablePosition();
-    const worldPos = this.isometricMap.tileToWorldXY(startPosition.x, startPosition.y);
+    const startPosition = this.topDownMap.getRandomWalkablePosition();
+    const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
     this.player.setPosition(worldPos.x, worldPos.y);
     
     // コンパニオンの位置も更新
     if (this.companions.length > 0) {
       for (const companion of this.companions) {
         // プレイヤーの近くに配置
-        const companionPos = this.isometricMap.getRandomWalkablePosition();
-        const companionWorldPos = this.isometricMap.tileToWorldXY(companionPos.x, companionPos.y);
+        const companionPos = this.topDownMap.getRandomWalkablePosition();
+        const companionWorldPos = this.topDownMap.tileToWorldXY(companionPos.x, companionPos.y);
         companion.setPosition(companionWorldPos.x, companionWorldPos.y);
       }
     }
@@ -839,5 +999,5 @@ export default class MainScene extends Phaser.Scene {
       return false;
     }
   }
-  
+
 }

@@ -569,13 +569,13 @@ export default class UIScene extends Phaser.Scene {
   }
   
   updateMinimap() {
-    if (!this.player || !this.mainScene.isometricMap) return;
+    if (!this.player || !this.mainScene.topDownMap) return;
     
     // ミニマップのクリア
     this.minimap.clear();
     
     // マップデータの取得
-    const mapData = this.mainScene.isometricMap.getMapData();
+    const mapData = this.mainScene.topDownMap.mapData;
     const mapWidth = mapData ? mapData.width : 50;
     const mapHeight = mapData ? mapData.height : 50;
     
@@ -584,49 +584,35 @@ export default class UIScene extends Phaser.Scene {
     const tileSize = minimapSize / Math.max(mapWidth, mapHeight);
     
     // マップタイルの描画
-    if (mapData && mapData.tiles) {
+    if (mapData && mapData.heightMap) {
       for (let y = 0; y < mapHeight; y++) {
         for (let x = 0; x < mapWidth; x++) {
-          const tile = mapData.tiles[y][x];
+          // 高さデータに基づくタイル色の決定
+          const heightValue = mapData.heightMap[y][x];
+          let color = this.getColorFromHeight(heightValue);
           
-          if (tile) {
-            // タイルの種類に応じた色
-            let color = 0x333333; // デフォルト色
-            
-            switch (tile.type) {
-              case 'floor':
-                color = 0x666666;
-                break;
-              case 'wall':
-                color = 0x222222;
-                break;
-              case 'water':
-                color = 0x0000ff;
-                break;
-              case 'lava':
-                color = 0xff0000;
-                break;
-              default:
-                break;
-            }
-            
-            // タイルの描画
-            this.minimap.fillStyle(color, 1);
-            this.minimap.fillRect(
-              this.scale.width - minimapSize - 10 + x * tileSize,
-              10 + y * tileSize,
-              tileSize,
-              tileSize
-            );
+          // 障害物チェック
+          if (mapData.objectPlacement && mapData.objectPlacement[y][x] === 3) {
+            color = 0x222222; // 障害物/壁
           }
+          
+          // タイルの描画
+          this.minimap.fillStyle(color, 1);
+          this.minimap.fillRect(
+            this.scale.width - minimapSize - 10 + x * tileSize,
+            10 + y * tileSize,
+            tileSize,
+            tileSize
+          );
         }
       }
     }
     
     // プレイヤーの位置を描画
     if (this.player) {
-      const playerX = this.player.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
-      const playerY = this.player.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+      const playerTile = this.mainScene.topDownMap.worldToTileXY(this.player.x, this.player.y);
+      const playerX = playerTile.x / mapWidth;
+      const playerY = playerTile.y / mapHeight;
       
       this.minimap.fillStyle(0x00ff00, 1);
       this.minimap.fillRect(
@@ -641,8 +627,9 @@ export default class UIScene extends Phaser.Scene {
     if (this.mainScene.enemies) {
       this.mainScene.enemies.forEach(enemy => {
         if (!enemy.isDead) {
-          const enemyX = enemy.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
-          const enemyY = enemy.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+          const enemyTile = this.mainScene.topDownMap.worldToTileXY(enemy.x, enemy.y);
+          const enemyX = enemyTile.x / mapWidth;
+          const enemyY = enemyTile.y / mapHeight;
           
           this.minimap.fillStyle(0xff0000, 1);
           this.minimap.fillRect(
@@ -658,8 +645,9 @@ export default class UIScene extends Phaser.Scene {
     // NPCの位置を描画
     if (this.mainScene.npcs) {
       this.mainScene.npcs.forEach(npc => {
-        const npcX = npc.x / (this.mainScene.isometricMap.tileWidth * mapWidth);
-        const npcY = npc.y / (this.mainScene.isometricMap.tileHeight * mapHeight);
+        const npcTile = this.mainScene.topDownMap.worldToTileXY(npc.x, npc.y);
+        const npcX = npcTile.x / mapWidth;
+        const npcY = npcTile.y / mapHeight;
         
         this.minimap.fillStyle(0xffff00, 1);
         this.minimap.fillRect(
@@ -669,6 +657,21 @@ export default class UIScene extends Phaser.Scene {
           3
         );
       });
+    }
+  }
+  
+  // 高さ値から色を取得
+  getColorFromHeight(height) {
+    if (height < 0.3) {
+      return 0x0000ff; // 水
+    } else if (height < 0.5) {
+      return 0x00aa00; // 草
+    } else if (height < 0.7) {
+      return 0x8b4513; // 土
+    } else if (height < 0.85) {
+      return 0x888888; // 石
+    } else {
+      return 0xffffff; // 雪
     }
   }
   

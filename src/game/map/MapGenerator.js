@@ -1,5 +1,5 @@
 import { createNoise2D, createNoise3D } from 'simplex-noise';
-import * as tf from 'tensorflow';
+import * as tf from '@tensorflow/tfjs';
 
 /**
  * マップ自動生成クラス

@@ -107,9 +107,22 @@ export default class BasicAction extends Action {
       this.owner.playAnimation();
     }
     
-    // 移動先が歩行可能かチェック
-    const isWalkable = this.scene.isWalkableAt && 
-                      this.scene.isWalkableAt(this.position.x, this.position.y);
+    // 移動先が歩行可能かチェック - TopDownMap対応
+    let isWalkable = false;
+    
+    // TopDownMapを使用する場合
+    if (this.scene.topDownMap) {
+      const tilePos = this.scene.topDownMap.worldToTileXY(this.position.x, this.position.y);
+      isWalkable = this.scene.topDownMap.isWalkableAt(tilePos.x, tilePos.y);
+    } 
+    // 従来のisWalkableAt関数がある場合
+    else if (this.scene.isWalkableAt) {
+      isWalkable = this.scene.isWalkableAt(this.position.x, this.position.y);
+    }
+    // どちらもない場合は移動可能と見なす
+    else {
+      isWalkable = true;
+    }
     
     if (!isWalkable) {
       // 移動失敗
@@ -120,9 +133,9 @@ export default class BasicAction extends Action {
       return;
     }
     
-    // 移動速度の計算
+    // 移動速度の計算 - トップダウン向けに調整
     const moveSpeed = this.owner.getMoveSpeed ? 
-                     this.owner.getMoveSpeed() : (this.moveSpeed || 2);
+                     this.owner.getMoveSpeed() : (this.moveSpeed || 150);
     
     // 移動方向を向く
     this.facePosition();
@@ -134,7 +147,7 @@ export default class BasicAction extends Action {
       y: this.position.y,
       duration: this.duration || 
                (Phaser.Math.Distance.Between(this.owner.x, this.owner.y, 
-                                             this.position.x, this.position.y) / moveSpeed * 100),
+                                             this.position.x, this.position.y) / moveSpeed * 1000),
       ease: 'Linear',
       onComplete: () => {
         // 移動完了
@@ -152,6 +165,24 @@ export default class BasicAction extends Action {
     // 移動音を再生
     if (this.soundKey && this.scene.sound) {
       this.scene.sound.play(this.soundKey);
+    }
+  }
+
+  // トップダウン向けの方向更新メソッドを追加
+  updateDirectionForTopDown() {
+    if (!this.moveTarget && !this.position) return;
+    
+    const targetX = this.position ? this.position.x : this.moveTarget.x;
+    const targetY = this.position ? this.position.y : this.moveTarget.y;
+    
+    const dx = targetX - this.owner.x;
+    const dy = targetY - this.owner.y;
+    
+    // トップダウン向けの4方向または8方向
+    if (Math.abs(dx) > Math.abs(dy)) {
+      this.owner.direction = dx > 0 ? 'right' : 'left';
+    } else {
+      this.owner.direction = dy > 0 ? 'down' : 'up';
     }
   }
   
@@ -175,8 +206,9 @@ export default class BasicAction extends Action {
       this.owner.x, this.owner.y,
       this.target.x, this.target.y
     );
-    
-    const attackRange = this.range * 32; // 1タイルを32ピクセルとして計算
+
+    const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
+    const attackRange = this.range * tileSize;
     
     if (distance > attackRange) {
       // 範囲外なら失敗
@@ -844,8 +876,12 @@ export default class BasicAction extends Action {
   // 範囲内の対象を探す
   findTargetsInArea(x, y, radius) {
     if (!this.scene) return [];
-    
+  
     const targets = [];
+    
+    // タイルサイズを考慮した半径の調整
+    const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
+    const adjustedRadius = radius * tileSize;
     
     // 敵の場合はプレイヤーとコンパニオンが対象
     if (this.owner.constructor.name === 'Enemy') {
@@ -855,7 +891,7 @@ export default class BasicAction extends Action {
           this.scene.player.x, this.scene.player.y
         );
         
-        if (distance <= radius) {
+        if (distance <= adjustedRadius) {
           targets.push(this.scene.player);
         }
       }

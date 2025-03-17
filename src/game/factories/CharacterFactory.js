@@ -18,11 +18,12 @@ export default class CharacterFactory {
     // プレイヤーのクラスタイプ
     const classType = config.classType || CharacterClassType.warrior;
     
-    // プレイヤーテクスチャ
+    // プレイヤーテクスチャ - トップダウン用のテクスチャキー命名規則に対応
     const texture = config.texture || `player_${this.getClassTextureName(classType)}`;
     
-    // プレイヤーの追加設定
+    // プレイヤーの追加設定 - トップダウン用のパラメータを追加
     const playerConfig = {
+      // 既存の設定
       name: config.name || 'プレイヤー',
       classType: classType,
       level: config.level || 1,
@@ -31,7 +32,13 @@ export default class CharacterFactory {
       dexterity: config.dexterity || this.getClassBaseStats(classType).dexterity,
       vitality: config.vitality || this.getClassBaseStats(classType).vitality,
       energy: config.energy || this.getClassBaseStats(classType).energy,
-      // プレイヤー固有
+      
+      // トップダウン用の追加設定
+      direction: config.direction || 'down', // 初期方向
+      moveSpeed: config.moveSpeed || 150,   // 移動速度
+      isTopDown: true,                      // トップダウンモードフラグ
+      
+      // 残りの設定
       maxPotion: config.maxPotion || 10,
       potionCount: config.potionCount || 5,
       experience: config.experience || 0,
@@ -42,6 +49,9 @@ export default class CharacterFactory {
     // プレイヤーの作成
     const player = new Player(this.scene, x, y, texture, playerConfig);
     
+    // トップダウン対応の移動コントロールをセットアップ
+    this.setupTopDownControls(player);
+    
     // 初期装備の設定
     if (config.initialEquipment) {
       this.setupInitialEquipment(player, config.initialEquipment);
@@ -50,6 +60,106 @@ export default class CharacterFactory {
     }
     
     return player;
+  }
+
+  // トップダウン用コントロールのセットアップ
+  setupTopDownControls(player) {
+    if (!player || !this.scene.input || !this.scene.input.keyboard) return;
+    
+    // カーソルキーのセットアップ
+    const cursors = this.scene.input.keyboard.createCursorKeys();
+    player.cursors = cursors;
+    
+    // WASDキーのセットアップ（オプション）
+    player.keys = {
+      up: this.scene.input.keyboard.addKey('W'),
+      down: this.scene.input.keyboard.addKey('S'),
+      left: this.scene.input.keyboard.addKey('A'),
+      right: this.scene.input.keyboard.addKey('D')
+    };
+    
+    // 移動ハンドラを追加（プレイヤークラス側で使用）
+    player.handleTopDownMovement = (time, delta) => {
+      // プレイヤーが行動不可状態の場合
+      if (player.isStunned || player.isRooted || player.isDead || player.isPerformingAction) {
+        return;
+      }
+      
+      // 移動フラグと速度
+      let isMoving = false;
+      const speed = player.getMoveSpeed ? player.getMoveSpeed() : 150;
+      const normalizedSpeed = speed * (delta / 1000);
+      
+      // 方向と速度をリセット
+      let dx = 0;
+      let dy = 0;
+      
+      // キー入力に基づいて方向を決定
+      if (player.cursors.up.isDown || player.keys.up.isDown) {
+        dy = -normalizedSpeed;
+        player.direction = 'up';
+        isMoving = true;
+      } else if (player.cursors.down.isDown || player.keys.down.isDown) {
+        dy = normalizedSpeed;
+        player.direction = 'down';
+        isMoving = true;
+      }
+      
+      if (player.cursors.left.isDown || player.keys.left.isDown) {
+        dx = -normalizedSpeed;
+        player.direction = 'left';
+        isMoving = true;
+      } else if (player.cursors.right.isDown || player.keys.right.isDown) {
+        dx = normalizedSpeed;
+        player.direction = 'right';
+        isMoving = true;
+      }
+      
+      // 移動アニメーションの更新
+      if (isMoving) {
+        player.animationState = 'walk';
+        
+        // 移動先の座標
+        const newX = player.x + dx;
+        const newY = player.y + dy;
+        
+        // 移動先が歩行可能かチェック
+        let canMove = true;
+        
+        if (this.scene.topDownMap) {
+          const tilePos = this.scene.topDownMap.worldToTileXY(newX, newY);
+          canMove = this.scene.topDownMap.isWalkableAt(tilePos.x, tilePos.y);
+        }
+        
+        // 移動可能なら位置を更新
+        if (canMove) {
+          player.x = newX;
+          player.y = newY;
+        }
+        
+        // アニメーション更新
+        if (player.playAnimation) {
+          player.playAnimation();
+        }
+      } else {
+        // 移動していない場合はアイドル状態
+        if (player.animationState === 'walk') {
+          player.animationState = 'idle';
+          if (player.playAnimation) {
+            player.playAnimation();
+          }
+        }
+      }
+    };
+    
+    // updateメソッドにハンドラを追加
+    const originalUpdate = player.update || function(){};
+    player.update = function(time, delta) {
+      originalUpdate.call(this, time, delta);
+      
+      // トップダウン移動処理
+      this.handleTopDownMovement(time, delta);
+    };
   }
   
   // 敵作成
@@ -62,19 +172,27 @@ export default class CharacterFactory {
     const enemyType = config.enemyType || this.getRandomEnemyType(config.difficulty);
     const level = config.level || 1;
     
-    // 敵テクスチャ
+    // 敵テクスチャ - トップダウン用のテクスチャキー命名規則に対応
     const texture = config.texture || `enemy_${enemyType}`;
     
-    // 敵の設定
+    // 敵の設定 - トップダウン用のパラメータを追加
     const enemyConfig = {
+      // 既存設定
       name: config.name || this.generateEnemyName(enemyType),
       level: level,
       enemyType: config.isBoss ? 'boss' : (config.isElite ? 'elite' : 'normal'),
+      
+      // トップダウン用の追加設定
+      direction: config.direction || 'down', // 初期方向
+      moveSpeed: config.moveSpeed || 100,    // 移動速度
+      isTopDown: true,                       // トップダウンモードフラグ
+      
       // ステータス（レベルに応じて調整）
       strength: config.strength || 10 + Math.floor(level * 0.8),
       dexterity: config.dexterity || 10 + Math.floor(level * 0.6),
       vitality: config.vitality || 10 + Math.floor(level),
       energy: config.energy || 10 + Math.floor(level * 0.4),
+      
       // 難易度
       difficulty: config.difficulty || 'normal'
     };
@@ -82,10 +200,113 @@ export default class CharacterFactory {
     // 敵の作成
     const enemy = new Enemy(this.scene, x, y, texture, enemyConfig);
     
+    // トップダウン対応のAI挙動をセットアップ
+    this.setupTopDownEnemyAI(enemy);
+    
     // ドロップアイテムの設定
     this.setupEnemyDrops(enemy, enemyConfig);
     
     return enemy;
+  }
+
+  // トップダウン用敵AIのセットアップ
+  setupTopDownEnemyAI(enemy) {
+    if (!enemy) return;
+    
+    // 既存のアップデート関数を保存
+    const originalUpdate = enemy.update || function(){};
+    
+    // AIの行動範囲（タイル数）
+    const detectionRange = enemy.detectionRange || 7;
+    
+    // 新しいアップデート関数
+    enemy.update = function(time, delta) {
+      // 元のアップデート関数を呼び出し
+      originalUpdate.call(this, time, delta);
+      
+      // 死亡や行動不可の場合は何もしない
+      if (this.isDead || this.isStunned || this.isRooted || this.isPerformingAction) {
+        return;
+      }
+      
+      // プレイヤーの検出
+      const player = this.scene.player;
+      if (!player || player.isDead) return;
+      
+      // プレイヤーとの距離計算
+      const distance = Phaser.Math.Distance.Between(
+        this.x, this.y, player.x, player.y
+      );
+      
+      // タイルサイズを考慮した検出範囲
+      const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
+      const detectionDistance = detectionRange * tileSize;
+      
+      // プレイヤーが検出範囲内の場合
+      if (distance <= detectionDistance) {
+        // プレイヤーが攻撃範囲内なら攻撃
+        const attackRange = this.attackRange * tileSize;
+        
+        if (distance <= attackRange) {
+          // 攻撃アクションを作成
+          const attackAction = this.scene.actionFactory.createBasicAction('attack', {
+            owner: this,
+            target: player,
+            scene: this.scene
+          });
+          
+          // 攻撃実行
+          if (attackAction) {
+            attackAction.play();
+          }
+        } 
+        // 攻撃範囲外ならプレイヤーに近づく
+        else {
+          // 移動先を決定
+          const angle = Math.atan2(player.y - this.y, player.x - this.x);
+          const moveSpeed = this.getMoveSpeed ? this.getMoveSpeed() : 100;
+          const normalizedSpeed = moveSpeed * (delta / 1000);
+          
+          // 新しい位置
+          const newX = this.x + Math.cos(angle) * normalizedSpeed;
+          const newY = this.y + Math.sin(angle) * normalizedSpeed;
+          
+          // 移動先が歩行可能かチェック
+          let canMove = true;
+          
+          if (this.scene.topDownMap) {
+            const tilePos = this.scene.topDownMap.worldToTileXY(newX, newY);
+            canMove = this.scene.topDownMap.isWalkableAt(tilePos.x, tilePos.y);
+          }
+          
+          // 移動可能なら位置を更新
+          if (canMove) {
+            this.x = newX;
+            this.y = newY;
+            
+            // 移動に合わせて向きを更新
+            if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
+              this.direction = Math.cos(angle) > 0 ? 'right' : 'left';
+            } else {
+              this.direction = Math.sin(angle) > 0 ? 'down' : 'up';
+            }
+            
+            // 移動アニメーション
+            this.animationState = 'walk';
+            if (this.playAnimation) {
+              this.playAnimation();
+            }
+          }
+        }
+      } 
+      // プレイヤーが範囲外ならアイドル状態
+      else if (this.animationState === 'walk') {
+        this.animationState = 'idle';
+        if (this.playAnimation) {
+          this.playAnimation();
+        }
+      }
+    };
   }
   
   // コンパニオン作成
@@ -143,7 +364,13 @@ export default class CharacterFactory {
       type: config.type || 'villager',
       shopType: config.shopType || 'general',
       shopItems: config.shopItems || [],
-      dialogues: config.dialogues || this.getDefaultDialogues(config.type, config.isShop)
+      dialogues: config.dialogues || this.getDefaultDialogues(config.type, config.isShop),
+      
+      // トップダウン用の追加設定
+      direction: config.direction || 'down',   // 初期方向
+      isTopDown: true,                         // トップダウンモードフラグ
+      interactionDistance: config.interactionDistance || 
+        (this.scene.topDownMap ? this.scene.topDownMap.tileSize * 1.5 : 48) // 相互作用距離
     };
 
     // NPCインスタンス生成

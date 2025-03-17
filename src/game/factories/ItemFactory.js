@@ -424,9 +424,9 @@ export default class ItemFactory {
               if (!this.scene.items) this.scene.items = [];
               this.scene.items.push(droppedItem);
               
-              // デプスソート用配列に追加
-              if (this.scene.isometricMap) {
-                this.scene.isometricMap.addToDepthSortedObjects(droppedItem);
+              // TopDownMapにアイテムを追加
+              if (this.scene.topDownMap) {
+                this.scene.topDownMap.addEntity(droppedItem);
               }
               
               // ドロップエフェクト
@@ -445,6 +445,31 @@ export default class ItemFactory {
     
     // 宝箱作成
     return new Chest(this.scene, x, y, 'chest_closed', level, difficulty);
+  }
+  
+  // データからアイテムを作成（ショップ等で使用）
+  createItemFromData(itemData) {
+    if (!itemData) return null;
+    
+    // アイテムタイプに応じて作成
+    switch (itemData.type) {
+      case 'equipment':
+        return this.createEquipment({
+          ...itemData,
+          x: 0,
+          y: 0
+        });
+      
+      case 'potion':
+        return this.createPotion({
+          ...itemData,
+          x: 0,
+          y: 0
+        });
+      
+      default:
+        return null;
+    }
   }
   
   // ランダムなレア度を取得

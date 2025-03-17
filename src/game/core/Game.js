@@ -1,8 +1,8 @@
 // src/game/core/Game.js
 import Phaser from 'phaser';
-import { BootScene } from './scenes/BootScene';
-import { PreloadScene } from './scenes/PreloadScene';
-import { GameScene } from './scenes/GameScene';
+//import { BootScene } from './scenes/BootScene';
+//import { PreloadScene } from './scenes/PreloadScene';
+import { MainScene } from './scenes/MainScene';
 import { LoadingScene } from './scenes/LoadingScene';
 import { MainMenuScene } from './scenes/MainMenuScene';
 import { OptionsMenuScene } from './scenes/OptionsMenuScene';
@@ -56,12 +56,12 @@ export class Game {
         }
       },
       scene: [
-        BootScene,
-        PreloadScene,
+        //BootScene,
+        //PreloadScene,
         LoadingScene,
         MainMenuScene,
         OptionsMenuScene,
-        GameScene,
+        MainScene,
         GameOverScene,
         PauseScene
       ],
@@ -86,6 +86,21 @@ export class Game {
     
     // シングルトンインスタンスを設定
     Game.instance = this;
+
+    // デバッグモード設定
+    this.debugMode = process.env.NODE_ENV !== 'production';
+    
+    // デバッグモード時はPhysicsのデバッグも有効に
+    if (this.debugMode) {
+      this.config.physics.arcade.debug = true;
+      
+      // コンソールにゲームインスタンスを露出（デバッグ用）
+      if (typeof window !== 'undefined') {
+        window.game = this;
+      }
+      
+      console.log('🎮 デバッグモードが有効です');
+    }
   }
   
   /**
