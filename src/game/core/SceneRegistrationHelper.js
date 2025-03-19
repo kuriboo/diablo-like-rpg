@@ -18,6 +18,11 @@ export class SceneRegistrationHelper {
      * @param {Object} SceneClass - シーンクラス
      */
     registerScene(key, SceneClass) {
+      if (!SceneClass) {
+        console.warn(`警告: ${key}に対するシーンクラスが未定義です`);
+        return;
+      }
+      console.log(`シーン登録: ${key}`, SceneClass);
       this.registeredSceneClasses.set(key, SceneClass);
     }
     

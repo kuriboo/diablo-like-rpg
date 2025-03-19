@@ -237,7 +237,7 @@ export default class Player extends Character {
     };
     
     // クラスに応じた初期スキルを設定
-    const classSkills = initialSkills[this.classType.name.toLowerCase()] || initialSkills.warrior;
+    const classSkills = initialSkills[this.classType.name/*.toLowerCase()*/] || initialSkills.warrior;
     
     this.skills = classSkills.map(skill => ({
       ...skill,

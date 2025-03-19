@@ -28,8 +28,9 @@ async function getPhaserMath() {
 
 import { SCENES } from '../constants';
 import { GameSettings } from '../../data/GameSettings';
+import SimplePlaceholderAssets  from '../../../debug/SimplePlaceholderAssets';
 
-export class OptionsMenuScene {
+export default class OptionsMenuScene {
   // 静的なシーンインスタンスを保持
   static instance = null;
   static PhaserMath = null;
@@ -51,12 +52,31 @@ export class OptionsMenuScene {
       }
     
       preload() {
+        // デバッグモードかどうかを判定
+        const isDebugMode = window.location.search.includes('debug=true');
+        
+        // プレースホルダーの初期化
+        if (isDebugMode) {
+          SimplePlaceholderAssets.setDebugMode(true);
+          SimplePlaceholderAssets.initialize(this);
+        }
+        
         // オプション画面用のアセット
-        this.load.image('options-background', 'assets/images/ui/options_background.png');
-        this.load.image('slider-track', 'assets/images/ui/slider_track.png');
-        this.load.image('slider-thumb', 'assets/images/ui/slider_thumb.png');
-        this.load.image('checkbox-on', 'assets/images/ui/checkbox_on.png');
-        this.load.image('checkbox-off', 'assets/images/ui/checkbox_off.png');
+        if (isDebugMode) {
+          // デバッグモード：プレースホルダーを使用
+          SimplePlaceholderAssets.safeLoadImage(this, 'options-background', 'assets/images/ui/options_background.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'slider-track', 'assets/images/ui/slider_track.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'slider-thumb', 'assets/images/ui/slider_thumb.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'checkbox-on', 'assets/images/ui/checkbox_on.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'checkbox-off', 'assets/images/ui/checkbox_off.png');
+        } else {
+          // 通常モード：普通にロード
+          this.load.image('options-background', 'assets/images/ui/options_background.png');
+          this.load.image('slider-track', 'assets/images/ui/slider_track.png');
+          this.load.image('slider-thumb', 'assets/images/ui/slider_thumb.png');
+          this.load.image('checkbox-on', 'assets/images/ui/checkbox_on.png');
+          this.load.image('checkbox-off', 'assets/images/ui/checkbox_off.png');
+        }
       }
     
       create() {

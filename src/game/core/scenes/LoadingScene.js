@@ -24,6 +24,7 @@ import AssetPipeline from '../AssetPipeline';
 import { SCENES } from '../constants';
 import PlaceholderAssets from '../../../debug/PlaceholderAssets';
 import { isDebugMode } from '../../../debug';
+import AudioPlaceholders from '../../../debug/AudioPlaceholders';
 
 /**
  * LoadingScene - ゲームアセットの読み込みを担当するシーン
@@ -181,6 +182,89 @@ export default class LoadingScene {
         // ロード進捗イベントのリスナー
         this.load.on('progress', this.updateProgressBar, this);
         this.load.on('complete', this.completeLoading, this);
+        
+        if (isDebugMode) {
+          console.log('🎮 デバッグモード: 音声プレースホルダーを準備中...');
+          
+          // 音声ロードのモック
+          const originalLoadAudio = this.load.audio;
+          
+          // 音声ロード関数をオーバーライド
+          this.load.audio = (key, urls) => {
+            // キーをキャッシュに登録するだけ（実際にはロードしない）
+            console.log(`🔊 音声アセットスキップ: ${key}`);
+            
+            // 音声が再生されたときにエラーにならないようモックオブジェクトを登録
+            if (!this.cache.audio.exists(key)) {
+              this.cache.audio.add(key, {
+                duration: 0,
+                isPlaying: false,
+                mute: false,
+                // ダミー関数を提供
+                play: () => { console.log(`▶️ モック音声再生: ${key}`); return this; },
+                stop: () => { return this; },
+                pause: () => { return this; },
+                resume: () => { return this; }
+              });
+            }
+            
+            return this;
+          };
+          
+          // サウンドシステムのモック拡張
+          if (this.sound) {
+            // オリジナルのメソッドを保存
+            const originalAdd = this.sound.add;
+            const originalPlay = this.sound.play;
+            
+            // add メソッドをオーバーライド
+            this.sound.add = (key, config) => {
+              console.log(`🔊 モック音声追加: ${key}`);
+              
+              // モックサウンドオブジェクトを返す
+              return {
+                key: key,
+                isPlaying: false,
+                isPaused: false,
+                loop: config?.loop || false,
+                volume: config?.volume || 1,
+                // 音声メソッドをモック
+                play: () => { console.log(`▶️ モック音声再生: ${key}`); return this; },
+                stop: () => { return this; },
+                pause: () => { return this; },
+                resume: () => { return this; },
+                setVolume: () => { return this; },
+                setLoop: () => { return this; },
+                setRate: () => { return this; }
+              };
+            };
+            
+            // play メソッドをオーバーライド
+            this.sound.play = (key, config) => {
+              console.log(`▶️ モック音声再生: ${key}`);
+              return this;
+            };
+          }
+          
+          // 必要なサウンドキーをあらかじめ登録
+          this.dummySoundKeys = [
+            'menu-bgm',
+            'hover-sfx',
+            'click-sfx',
+            'bgm_main',
+            'bgm_battle',
+            'bgm_town',
+            'sfx_attack',
+            'sfx_spell',
+            'sfx_item',
+            'game_over'
+          ];
+          
+          // すべてのダミーサウンドを登録
+          this.dummySoundKeys.forEach(key => {
+            this.load.audio(key, '');
+          });
+        }
       }
       
       create() {
@@ -191,6 +275,48 @@ export default class LoadingScene {
         
         // アセットパイプラインの初期化
         this.initializeAssetPipeline();
+
+        if (isDebugMode) {
+          console.log('🎮 デバッグモード: 音声システムをモックに置き換え中...');
+          
+          // グローバルなサウンドシステムもモック化（他のシーンのためにゲーム全体に適用）
+          if (this.sys.game.sound) {
+            // オリジナルのメソッドを保存
+            const originalAdd = this.sys.game.sound.add;
+            const originalPlay = this.sys.game.sound.play;
+            
+            // add メソッドをオーバーライド
+            this.sys.game.sound.add = (key, config) => {
+              console.log(`🔊 モック音声追加(グローバル): ${key}`);
+              
+              // モックサウンドオブジェクトを返す
+              return {
+                key: key,
+                isPlaying: false,
+                isPaused: false,
+                loop: config?.loop || false,
+                volume: config?.volume || 1,
+                // 音声メソッドをモック
+                play: function() { 
+                  console.log(`▶️ モック音声再生(グローバル): ${key}`); 
+                  return this; 
+                },
+                stop: function() { return this; },
+                pause: function() { return this; },
+                resume: function() { return this; },
+                setVolume: function() { return this; },
+                setLoop: function() { return this; },
+                setRate: function() { return this; }
+              };
+            };
+            
+            // play メソッドをオーバーライド
+            this.sys.game.sound.play = (key, config) => {
+              console.log(`▶️ モック音声再生(グローバル): ${key}`);
+              return null;
+            };
+          }
+        }
         
         // 短い遅延後にメニューシーンへ移動
         this.time.delayedCall(500, () => {

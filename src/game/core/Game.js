@@ -9,6 +9,7 @@ import PauseScene from './scenes/PauseScene';
 import UIScene from './scenes/UIScene';
 import { GAME_CONFIG, SCENES } from './constants';
 import { GameSettings } from '../data/GameSettings';
+import SimplePlaceholderAssets from '../../debug/SimplePlaceholderAssets';
 
 /**
  * ゲームのシングルトンインスタンスを管理するクラス
@@ -40,6 +41,18 @@ export class Game {
     if (!game.sceneHelper) {
       game.sceneHelper = new SceneRegistrationHelper();
     }
+
+    await Promise.all([
+      LoadingScene.initialize(),
+      MainMenuScene.initialize(),
+      OptionsMenuScene.initialize(),
+      MainScene.initialize(),
+      GameOverScene.initialize(),
+      PauseScene.initialize(),
+      UIScene.initialize()
+    ]);
+
+    console.log("登録前:", MainMenuScene, OptionsMenuScene);
     
     // 各シーンを登録
     game.sceneHelper.registerScenes({
@@ -51,6 +64,8 @@ export class Game {
       [SCENES.PAUSE]: PauseScene,
       [SCENES.UI]: UIScene
     });
+
+    console.log("登録後:", game.sceneHelper.registeredSceneClasses);
     
     // シーンを初期化
     await game.sceneHelper.initializeAllScenes();
@@ -346,6 +361,27 @@ if (typeof window !== 'undefined' && !window.gameInitialized) {
       
       const container = document.getElementById('game-container') || document.body;
       container.appendChild(loadingElement);
+
+      // デバッグモード判定
+      const isDebugMode = window.location.search.includes('debug=true');
+
+      // ゲーム初期化時にプレースホルダー設定
+      if (isDebugMode) {
+        console.log('🎮 デバッグモードが有効です');
+        SimplePlaceholderAssets.setDebugMode(true);
+        
+        // 最初のシーン作成後に初期化するために、イベントを利用
+        document.addEventListener('DOMContentLoaded', () => {
+          // ゲーム初期化後にプレースホルダーを準備
+          const gameStartInterval = setInterval(() => {
+            const scene = window.game?.scene?.scenes?.[0];
+            if (scene) {
+              SimplePlaceholderAssets.initialize(scene);
+              clearInterval(gameStartInterval);
+            }
+          }, 100);
+        });
+      }
       
       // ゲーム初期化
       await Game.initialize();

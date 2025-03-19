@@ -25,7 +25,7 @@ import { SCENES } from '../constants';
 import { PlayerStats } from '../../data/PlayerStats';
 
 // GameOverSceneのプロキシクラス
-export class GameOverScene {
+export default class GameOverScene {
   // 静的なシーンインスタンスを保持
   static instance = null;
   

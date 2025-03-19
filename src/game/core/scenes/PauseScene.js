@@ -24,7 +24,7 @@ async function getSceneClass() {
 
 import { SCENES } from '../constants';
 
-export class PauseScene {
+export default class PauseScene {
   // 静的なシーンインスタンスを保持
   static instance = null;
   

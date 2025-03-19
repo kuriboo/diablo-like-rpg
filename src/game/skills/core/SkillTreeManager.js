@@ -8,7 +8,7 @@ import ActiveNode from '../nodes/ActiveNode';
  * スキルツリー全体を管理するクラス
  * スキルの読み込み、状態管理、スキルポイントの割り当てなどを担当
  */
-class SkillTreeManager {
+export default class SkillTreeManager {
   constructor() {
     this.uuid = uuidv4();
     this.skillLoader = new SkillLoader();
@@ -180,7 +180,3 @@ class SkillTreeManager {
     skillState.addSkillPoints(points);
   }
 }
-
-// シングルトンとしてエクスポート
-const skillTreeManager = new SkillTreeManager();
-export default skillTreeManager;

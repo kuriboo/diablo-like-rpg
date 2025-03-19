@@ -21,8 +21,10 @@ async function getSceneClass() {
 }
 
 import { SCENES } from '../constants';
+import SimplePlaceholderAssets  from '../../../debug/SimplePlaceholderAssets';
+import AudioPlaceholders from '../../../debug/AudioPlaceholders';
 
-export class MainMenuScene {
+export default class MainMenuScene {
   // 静的なシーンインスタンスを保持
   static instance = null;
   
@@ -41,11 +43,40 @@ export class MainMenuScene {
       }
     
       preload() {
-        // メニュー画面用のアセットをロード
-        this.load.image('menu-background', 'assets/images/ui/menu_background.png');
-        this.load.image('game-logo', 'assets/images/ui/game_logo.png');
-        this.load.image('button-normal', 'assets/images/ui/button_normal.png');
-        this.load.image('button-hover', 'assets/images/ui/button_hover.png');
+        // デバッグモードかどうかを判定（URL パラメータなどで切り替え可能）
+        const isDebugMode = window.location.search.includes('debug=true');
+        
+        // プレースホルダーの初期化
+        if (isDebugMode) {
+          SimplePlaceholderAssets.setDebugMode(true);
+          SimplePlaceholderAssets.initialize(this);
+        }
+        
+        // メニュー画面用のアセットをロード（安全なロード方法を使用）
+        if (isDebugMode) {
+          // デバッグモード：プレースホルダーを使用
+          SimplePlaceholderAssets.safeLoadImage(this, 'menu-background', 'assets/images/ui/menu_background.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'game-logo', 'assets/images/ui/game_logo.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'button-normal', 'assets/images/ui/button_normal.png');
+          SimplePlaceholderAssets.safeLoadImage(this, 'button-hover', 'assets/images/ui/button_hover.png');
+        } else {
+          // 通常モード：普通にロード
+          this.load.image('menu-background', 'assets/images/ui/menu_background.png');
+          this.load.image('game-logo', 'assets/images/ui/game_logo.png');
+          this.load.image('button-normal', 'assets/images/ui/button_normal.png');
+          this.load.image('button-hover', 'assets/images/ui/button_hover.png');
+        }
+
+        // 音声プレースホルダーの初期化
+        if (isDebugMode) {
+          AudioPlaceholders.setDebugMode(true);
+          AudioPlaceholders.initialize(this);
+        }
+        
+        // 音声アセットの安全なロード
+        AudioPlaceholders.safeLoadAudio(this, 'menu-bgm', 'assets/audio/menu_bgm.mp3');
+        AudioPlaceholders.safeLoadAudio(this, 'click-sfx', 'assets/audio/click.mp3');
+        AudioPlaceholders.safeLoadAudio(this, 'hover-sfx', 'assets/audio/hover.mp3');
       }
     
       create() {
@@ -88,9 +119,20 @@ export class MainMenuScene {
           }
         });
         
-        // 背景音楽の再生（BGM）
-        if (!this.sound.get('menu-bgm')) {
-          this.sound.add('menu-bgm', { loop: true, volume: 0.5 }).play();
+        // デバッグモードかどうかを判定
+        const isDebugMode = window.location.search.includes('debug=true');
+        
+        // 背景音楽の再生（BGM）- デバッグモード時はスキップ
+        if (!isDebugMode && this.sound && this.sound.add) {
+          try {
+            if (!this.sound.get('menu-bgm')) {
+              this.sound.add('menu-bgm', { loop: true, volume: 0.5 }).play();
+            }
+          } catch (error) {
+            console.warn('BGM再生に失敗しました: ', error);
+          }
+        } else {
+          console.log('デバッグモード: BGMの再生をスキップしました');
         }
       }
       
@@ -106,9 +148,20 @@ export class MainMenuScene {
           align: 'center'
         }).setOrigin(0.5);
         
+        // デバッグモード判定
+        const isDebugMode = window.location.search.includes('debug=true');
+        
         button.on('pointerover', () => {
           button.setTexture('button-hover');
-          this.sound.play('hover-sfx', { volume: 0.3 });
+          
+          // ホバー音（デバッグモード時はスキップ）
+          if (!isDebugMode && this.sound && this.sound.play) {
+            try {
+              this.sound.play('hover-sfx', { volume: 0.3 });
+            } catch (error) {
+              console.warn('ホバー音の再生に失敗しました');
+            }
+          }
         });
         
         button.on('pointerout', () => {
@@ -116,7 +169,15 @@ export class MainMenuScene {
         });
         
         button.on('pointerdown', () => {
-          this.sound.play('click-sfx', { volume: 0.5 });
+          // クリック音（デバッグモード時はスキップ）
+          if (!isDebugMode && this.sound && this.sound.play) {
+            try {
+              this.sound.play('click-sfx', { volume: 0.5 });
+            } catch (error) {
+              console.warn('クリック音の再生に失敗しました');
+            }
+          }
+          
           callback();
         });
         

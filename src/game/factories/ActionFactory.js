@@ -8,7 +8,7 @@ import skillTreeManager from '../skills/core/SkillTreeManager';
  * アクションファクトリークラス
  * ゲーム内で使用される各種アクションを生成する責務を持つ
  */
-class ActionFactory {
+export default class ActionFactory {
   constructor() {
     this.uuid = uuidv4();
     this.actionTemplates = new Map(); // テンプレートアクションのマップ
@@ -363,7 +363,3 @@ class ActionFactory {
     });
   }
 }
-
-// シングルトンとしてエクスポート
-const actionFactory = new ActionFactory();
-export default actionFactory;
