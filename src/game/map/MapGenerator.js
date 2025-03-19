@@ -1,5 +1,12 @@
 import { createNoise2D, createNoise3D } from 'simplex-noise';
-import * as tf from '@tensorflow/tfjs';
+
+// TensorFlowを動的にインポート
+let tf = null;
+if (typeof window !== 'undefined') {
+  import('@tensorflow/tfjs').then(module => {
+    tf = module;
+  });
+}
 
 /**
  * マップ自動生成クラス
@@ -1657,49 +1664,17 @@ class MapGenerator {
    * TensorFlowでマップ生成を拡張（初歩的な実装）
    */
   async initializeTensorFlowModel() {
-    try {
-      // シンプルなモデルを作成
-      this.tfModel = tf.sequential();
-      
-      // 入力層: マップサイズと難易度などを入力
-      this.tfModel.add(tf.layers.dense({
-        inputShape: [5],  // 入力特徴量: 幅, 高さ, 難易度指数, ノイズスケール, シード値
-        units: 64,
-        activation: 'relu'
-      }));
-      
-      // 隠れ層
-      this.tfModel.add(tf.layers.dense({
-        units: 128,
-        activation: 'relu'
-      }));
-      
-      // 出力層: パラメータ調整値
-      this.tfModel.add(tf.layers.dense({
-        units: 10,  // 部屋サイズ, 部屋数, 敵密度などの調整パラメータ
-        activation: 'sigmoid'
-      }));
-      
-      // モデルをコンパイル
-      this.tfModel.compile({
-        optimizer: 'adam',
-        loss: 'meanSquaredError'
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('TensorFlow model initialization failed:', error);
-      return false;
+    if (!tf) {
+      console.warn('TensorFlow is not available in this environment');
+      return {};
     }
-  }
-
-  /**
-   * TensorFlowを使用してマップ生成パラメータを調整
-   * @returns {object} 調整されたパラメータ
-   */
-  async getTensorFlowAdjustedParameters() {
+    
     if (!this.tfModel) {
       await this.initializeTensorFlowModel();
+    }
+    
+    if (!this.tfModel) {
+      return {}; // モデル初期化に失敗した場合
     }
     
     try {

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ActionType } from '../../constants/actionTypes';
+import { getDistance } from '../../utils/mathUtils';
 
 export default class Action {
   constructor(config = {}) {
@@ -203,8 +204,9 @@ export default class Action {
       // 範囲条件（対象が一定範囲内にいるか）
       case 'range':
         if (!this.target) return false;
-      
-        const distance = Phaser.Math.Distance.Between(
+        
+        // mathUtilsのgetDistanceを使用
+        const distance = getDistance(
           this.owner.x, this.owner.y,
           this.target.x, this.target.y
         );

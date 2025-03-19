@@ -1,5 +1,4 @@
 // src/game/core/Game.js
-import Phaser from 'phaser';
 //import { BootScene } from './scenes/BootScene';
 //import { PreloadScene } from './scenes/PreloadScene';
 import { MainScene } from './scenes/MainScene';
@@ -37,17 +36,12 @@ export class Game {
     // ゲーム設定の初期化
     this.settings = GameSettings.getInstance();
     
-    // Phaserの設定
+    // Phaserが読み込まれる前に設定のみ準備する
     this.config = {
-      type: Phaser.AUTO,
       width: GAME_CONFIG.WIDTH,
       height: GAME_CONFIG.HEIGHT,
       parent: 'game-container',
       backgroundColor: '#000000',
-      scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-      },
       physics: {
         default: 'arcade',
         arcade: {
@@ -56,8 +50,6 @@ export class Game {
         }
       },
       scene: [
-        //BootScene,
-        //PreloadScene,
         LoadingScene,
         MainMenuScene,
         OptionsMenuScene,
@@ -73,6 +65,9 @@ export class Game {
         antialias: true
       }
     };
+    
+    // Phaserインスタンス
+    this.Phaser = null;
     
     // ゲームインスタンスは初期化時には作成しない
     this.instance = null;
@@ -111,19 +106,58 @@ export class Game {
       this.instance.scale.refresh();
     }
   }
+
+  /**
+   * Phaserをロードする
+   * @returns {Promise<any>} Phaserモジュール
+   */
+  async loadPhaser() {
+    if (this.Phaser) return this.Phaser;
+    
+    // クライアントサイドでのみ実行
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      // Phaserを動的にインポート
+      const module = await import('phaser');
+      this.Phaser = module.default;
+      
+      // Phaserが読み込まれたので、設定を完成させる
+      this.config.type = this.Phaser.AUTO;
+      this.config.scale = {
+        mode: this.Phaser.Scale.FIT,
+        autoCenter: this.Phaser.Scale.CENTER_BOTH
+      };
+      
+      return this.Phaser;
+    } catch (error) {
+      console.error('Failed to load Phaser:', error);
+      return null;
+    }
+  }
   
   /**
    * ゲームを初期化して起動する
    */
-  init() {
+  async init() {
     if (!this.instance) {
+      // Phaserを動的にロード
+      const Phaser = await this.loadPhaser();
+      if (!Phaser) {
+        console.error('Phaser could not be loaded. Game initialization failed.');
+        return this;
+      }
+      
+      // ゲームインスタンスを作成
       this.instance = new Phaser.Game(this.config);
       
       // ゲーム設定の適用
       this.settings.applySettings(this.instance);
       
       // リサイズイベントのハンドラを設定
-      window.addEventListener('resize', this.onResize.bind(this));
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', this.onResize.bind(this));
+      }
     }
     return this;
   }
@@ -131,10 +165,10 @@ export class Game {
   /**
    * ゲームを開始する
    */
-  start() {
+  async start() {
     // インスタンスがない場合は初期化
     if (!this.instance) {
-      this.init();
+      await this.init();
     }
     
     // ゲームが既に起動している場合は何もしない

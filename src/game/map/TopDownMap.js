@@ -1,5 +1,3 @@
-import Phaser from 'phaser';
-
 export default class TopDownMap {
   constructor(options = {}) {
     this.scene = options.scene;

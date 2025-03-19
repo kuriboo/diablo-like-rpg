@@ -1,5 +1,3 @@
-import Phaser from 'phaser';
-
 export default class IsometricMap {
   constructor(options = {}) {
     this.scene = options.scene;

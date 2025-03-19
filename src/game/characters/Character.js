@@ -1,6 +1,25 @@
-import Phaser from 'phaser';
+// Phaserの静的インポートを動的インポートに変更
+// import Phaser from 'phaser';
 import { v4 as uuidv4 } from 'uuid';
 import { CharacterClassType } from '../../constants/characterTypes';
+import { getDistance } from '../../utils/mathUtils';
+
+// Phaserを動的にロードするための変数とヘルパー関数
+let Phaser = null;
+async function loadPhaser() {
+  if (typeof window === 'undefined') return null;
+  if (Phaser) return Phaser;
+  
+  try {
+    const module = await import('phaser');
+    Phaser = module.default;
+    return Phaser;
+  } catch (error) {
+    console.error('Failed to load Phaser:', error);
+    return null;
+  }
+}
+
 
 export default class Character extends Phaser.GameObjects.Sprite {
   constructor(scene, x, y, texture, config = {}) {
@@ -530,7 +549,7 @@ export default class Character extends Phaser.GameObjects.Sprite {
     }
     
     // 攻撃範囲チェック
-    const distance = Phaser.Math.Distance.Between(
+    const distance = getDistance(
       this.x, this.y, target.x, target.y
     );
     

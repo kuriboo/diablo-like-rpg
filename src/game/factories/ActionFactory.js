@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from 'uuid';
-import Action from '../actions/Action';
 import BasicAction from '../actions/BasicAction';
 import SpecialAction from '../actions/SpecialAction';
 import { ActionType } from '../../constants/actionTypes';

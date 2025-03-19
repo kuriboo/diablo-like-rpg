@@ -2,6 +2,7 @@ import Action from './Action';
 import BasicAction from './BasicAction';
 import { ActionType } from '../../constants/actionTypes';
 import Effect from '../objects/Effect';
+import { getDistance } from '../../utils/mathUtils';
 
 export default class SpecialAction extends Action {
   constructor(config = {}) {
@@ -754,7 +755,7 @@ export default class SpecialAction extends Action {
     // 敵の場合はプレイヤーとコンパニオンが対象
     if (this.owner.constructor.name === 'Enemy') {
       if (this.scene.player && !this.scene.player.isDead) {
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y, 
           this.scene.player.x, this.scene.player.y
         );
@@ -767,7 +768,7 @@ export default class SpecialAction extends Action {
       for (const companion of (this.scene.companions || [])) {
         if (companion.isDead) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           companion.x, companion.y
         );
@@ -782,7 +783,7 @@ export default class SpecialAction extends Action {
       for (const enemy of (this.scene.enemies || [])) {
         if (enemy.isDead) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           enemy.x, enemy.y
         );
@@ -807,7 +808,7 @@ export default class SpecialAction extends Action {
       for (const enemy of (this.scene.enemies || [])) {
         if (enemy.isDead || enemy === this.owner) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           enemy.x, enemy.y
         );
@@ -820,7 +821,7 @@ export default class SpecialAction extends Action {
     // プレイヤーやコンパニオンの場合はプレイヤーとコンパニオンが対象
     else {
       if (this.scene.player && !this.scene.player.isDead) {
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           this.scene.player.x, this.scene.player.y
         );
@@ -833,7 +834,7 @@ export default class SpecialAction extends Action {
       for (const companion of (this.scene.companions || [])) {
         if (companion.isDead || companion === this.owner) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           companion.x, companion.y
         );

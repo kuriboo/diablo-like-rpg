@@ -1,6 +1,7 @@
 import Action from './Action';
 import { ActionType } from '../../constants/actionTypes';
 import Effect from '../objects/Effect';
+import { getDistance } from '../../utils/mathUtils';
 
 export default class BasicAction extends Action {
   constructor(config = {}) {
@@ -140,14 +141,18 @@ export default class BasicAction extends Action {
     // 移動方向を向く
     this.facePosition();
     
+    // 2点間の距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      this.position.x, this.position.y
+    );
+    
     // Tweenで移動
     this.scene.tweens.add({
       targets: this.owner,
       x: this.position.x,
       y: this.position.y,
-      duration: this.duration || 
-               (Phaser.Math.Distance.Between(this.owner.x, this.owner.y, 
-                                             this.position.x, this.position.y) / moveSpeed * 1000),
+      duration: this.duration || (distance / moveSpeed * 1000),
       ease: 'Linear',
       onComplete: () => {
         // 移動完了
@@ -202,7 +207,7 @@ export default class BasicAction extends Action {
     }
     
     // 攻撃範囲のチェック
-    const distance = Phaser.Math.Distance.Between(
+    const distance = getDistance(
       this.owner.x, this.owner.y,
       this.target.x, this.target.y
     );
@@ -830,7 +835,7 @@ export default class BasicAction extends Action {
     for (const enemy of enemies) {
       if (enemy.isDead) continue;
       
-      const distance = Phaser.Math.Distance.Between(
+      const distance = getDistance(
         this.owner.x, this.owner.y,
         enemy.x, enemy.y
       );
@@ -859,7 +864,7 @@ export default class BasicAction extends Action {
     for (const obj of interactiveObjects) {
       if (obj.isDead || !obj.canInteract) continue;
       
-      const distance = Phaser.Math.Distance.Between(
+      const distance = getDistance(
         this.owner.x, this.owner.y,
         obj.x, obj.y
       );
@@ -886,7 +891,7 @@ export default class BasicAction extends Action {
     // 敵の場合はプレイヤーとコンパニオンが対象
     if (this.owner.constructor.name === 'Enemy') {
       if (this.scene.player && !this.scene.player.isDead) {
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y, 
           this.scene.player.x, this.scene.player.y
         );
@@ -899,7 +904,7 @@ export default class BasicAction extends Action {
       for (const companion of (this.scene.companions || [])) {
         if (companion.isDead) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           companion.x, companion.y
         );
@@ -914,7 +919,7 @@ export default class BasicAction extends Action {
       for (const enemy of (this.scene.enemies || [])) {
         if (enemy.isDead) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           enemy.x, enemy.y
         );
@@ -939,7 +944,7 @@ export default class BasicAction extends Action {
       for (const enemy of (this.scene.enemies || [])) {
         if (enemy.isDead || enemy === this.owner) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           enemy.x, enemy.y
         );
@@ -952,7 +957,7 @@ export default class BasicAction extends Action {
     // プレイヤーやコンパニオンの場合はプレイヤーとコンパニオンが対象
     else {
       if (this.scene.player && !this.scene.player.isDead) {
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           this.scene.player.x, this.scene.player.y
         );
@@ -965,7 +970,7 @@ export default class BasicAction extends Action {
       for (const companion of (this.scene.companions || [])) {
         if (companion.isDead || companion === this.owner) continue;
         
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           x, y,
           companion.x, companion.y
         );
@@ -978,4 +983,5 @@ export default class BasicAction extends Action {
     
     return targets;
   }
+  
 }
