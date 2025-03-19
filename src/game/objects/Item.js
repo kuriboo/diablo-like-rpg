@@ -1,9 +1,14 @@
-import Phaser from 'phaser';
 import { v4 as uuidv4 } from 'uuid';
+import { getDistance } from '../../utils/mathUtils';
 
-export default class Item extends Phaser.GameObjects.Sprite {
+export default class Item {
   constructor(scene, x, y, texture) {
-    super(scene, x, y, texture);
+    this.scene = scene;
+    this._x = x;
+    this._y = y;
+    
+    // スプライトをメンバーとして作成
+    this.sprite = scene.add.sprite(x, y, texture);
     
     // 基本的なアイテムプロパティ
     this.uuid = uuidv4();
@@ -21,9 +26,9 @@ export default class Item extends Phaser.GameObjects.Sprite {
     this.interactionDelay = 500; // ミリ秒単位のインタラクション遅延
     
     // 表示設定
-    this.setOrigin(0.5, 0.5);
-    this.setScale(0.8);
-    this.setInteractive();
+    this.sprite.setOrigin(0.5, 0.5);
+    this.sprite.setScale(0.8);
+    this.sprite.setInteractive();
     
     // フローティングエフェクト
     this.yOrig = y;
@@ -40,12 +45,91 @@ export default class Item extends Phaser.GameObjects.Sprite {
       .setAlpha(0);
     
     // イベントリスナー
-    this.on('pointerdown', this.onClick);
-    this.on('pointerover', this.onHover);
-    this.on('pointerout', this.onHoverEnd);
+    this.sprite.on('pointerdown', () => this.onClick());
+    this.sprite.on('pointerover', () => this.onHover());
+    this.sprite.on('pointerout', () => this.onHoverEnd());
     
     // アップデート関数を有効化
     scene.events.on('update', this.update, this);
+  }
+  
+  // 位置プロパティのゲッターとセッター
+  get x() {
+    return this._x;
+  }
+  
+  set x(value) {
+    this._x = value;
+    if (this.sprite) this.sprite.x = value;
+  }
+  
+  get y() {
+    return this._y;
+  }
+  
+  set y(value) {
+    this._y = value;
+    if (this.sprite) this.sprite.y = value;
+  }
+  
+  // アルファ値のゲッターとセッター
+  get alpha() {
+    return this.sprite ? this.sprite.alpha : 1;
+  }
+  
+  set alpha(value) {
+    if (this.sprite) this.sprite.alpha = value;
+  }
+  
+  // スケール値のゲッターとセッター
+  get scale() {
+    return this.sprite ? this.sprite.scale : 1;
+  }
+  
+  set scale(value) {
+    if (this.sprite) this.sprite.setScale(value);
+  }
+  
+  // スプライト関連のメソッドの委譲
+  setOrigin(x, y) {
+    if (this.sprite) this.sprite.setOrigin(x, y);
+    return this;
+  }
+  
+  setInteractive(options) {
+    if (this.sprite) this.sprite.setInteractive(options);
+    return this;
+  }
+  
+  disableInteractive() {
+    if (this.sprite) this.sprite.disableInteractive();
+    return this;
+  }
+  
+  setScale(value) {
+    if (this.sprite) this.sprite.setScale(value);
+    return this;
+  }
+  
+  // イベント発火の委譲
+  emit(event, ...args) {
+    if (this.sprite) {
+      this.sprite.emit(event, ...args);
+    }
+  }
+  
+  on(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.on(event, callback, context);
+    }
+    return this;
+  }
+  
+  once(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.once(event, callback, context);
+    }
+    return this;
   }
   
   onClick() {
@@ -56,7 +140,7 @@ export default class Item extends Phaser.GameObjects.Sprite {
       // プレイヤーとの距離をチェック
       const player = this.scene.player;
       if (player) {
-        const distance = Phaser.Math.Distance.Between(
+        const distance = getDistance(
           this.x, this.y, player.x, player.y
         );
         
@@ -123,7 +207,7 @@ export default class Item extends Phaser.GameObjects.Sprite {
       
       // 収集エフェクト
       this.scene.tweens.add({
-        targets: [this, this.glow],
+        targets: [this.sprite, this.glow],
         y: this.y - 20,
         alpha: 0,
         scale: 0.5,
@@ -186,6 +270,8 @@ export default class Item extends Phaser.GameObjects.Sprite {
       this.glow.destroy();
     }
     
-    super.destroy();
+    if (this.sprite) {
+      this.sprite.destroy();
+    }
   }
 }

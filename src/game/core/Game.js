@@ -1,12 +1,12 @@
 // src/game/core/Game.js
-//import { BootScene } from './scenes/BootScene';
-//import { PreloadScene } from './scenes/PreloadScene';
-import { MainScene } from './scenes/MainScene';
-import { LoadingScene } from './scenes/LoadingScene';
-import { MainMenuScene } from './scenes/MainMenuScene';
-import { OptionsMenuScene } from './scenes/OptionsMenuScene';
-import { GameOverScene } from './scenes/GameOverScene';
-import { PauseScene } from './scenes/PauseScene';
+import { SceneRegistrationHelper } from './SceneRegistrationHelper';
+import LoadingScene from './scenes/LoadingScene';
+import MainMenuScene from './scenes/MainMenuScene';
+import OptionsMenuScene from './scenes/OptionsMenuScene';
+import MainScene from './scenes/MainScene';
+import GameOverScene from './scenes/GameOverScene';
+import PauseScene from './scenes/PauseScene';
+import UIScene from './scenes/UIScene';
 import { GAME_CONFIG, SCENES } from './constants';
 import { GameSettings } from '../data/GameSettings';
 
@@ -26,6 +26,89 @@ export class Game {
     }
     return Game.instance;
   }
+  
+  /**
+   * ゲームを非同期で初期化する静的メソッド
+   * @param {Object} customConfig - カスタム設定（オプション）
+   * @returns {Promise<Game>} 初期化されたGameインスタンス
+   */
+  static async initialize(customConfig = {}) {
+    // ゲームインスタンスを取得
+    const game = Game.getInstance();
+    
+    // シーン登録ヘルパーを初期化
+    if (!game.sceneHelper) {
+      game.sceneHelper = new SceneRegistrationHelper();
+    }
+    
+    // 各シーンを登録
+    game.sceneHelper.registerScenes({
+      [SCENES.LOADING]: LoadingScene,
+      [SCENES.MAIN_MENU]: MainMenuScene,
+      [SCENES.OPTIONS_MENU]: OptionsMenuScene, 
+      [SCENES.GAME]: MainScene,
+      [SCENES.GAME_OVER]: GameOverScene,
+      [SCENES.PAUSE]: PauseScene,
+      [SCENES.UI]: UIScene
+    });
+    
+    // シーンを初期化
+    await game.sceneHelper.initializeAllScenes();
+    
+    // Phaserを動的にロード
+    const Phaser = await game.loadPhaser();
+    if (!Phaser) {
+      throw new Error('Phaserのロードに失敗しました');
+    }
+    
+    // デフォルトの設定とカスタム設定をマージ
+    const baseConfig = {
+      width: GAME_CONFIG.WIDTH,
+      height: GAME_CONFIG.HEIGHT,
+      parent: 'game-container',
+      backgroundColor: '#000000',
+      type: Phaser.AUTO,
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { y: GAME_CONFIG.GRAVITY },
+          debug: game.debugMode
+        }
+      },
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+      scene: game.sceneHelper.getSceneConfig(),
+      audio: {
+        disableWebAudio: false
+      },
+      render: {
+        pixelArt: false,
+        antialias: true
+      }
+    };
+    
+    // カスタム設定があれば上書き
+    game.config = { ...baseConfig, ...customConfig };
+    
+    // ゲームインスタンスをまだ作成していなければ作成
+    if (!game.instance) {
+      game.instance = new Phaser.Game(game.config);
+      
+      // ゲーム設定の適用
+      game.settings.applySettings(game.instance);
+      
+      // リサイズイベントのハンドラを設定
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', game.onResize.bind(game));
+      }
+      
+      console.log('ゲームが初期化されました');
+    }
+    
+    return game;
+  }
 
   constructor() {
     // 既にインスタンスが存在する場合は既存のインスタンスを返す
@@ -36,40 +119,16 @@ export class Game {
     // ゲーム設定の初期化
     this.settings = GameSettings.getInstance();
     
-    // Phaserが読み込まれる前に設定のみ準備する
-    this.config = {
-      width: GAME_CONFIG.WIDTH,
-      height: GAME_CONFIG.HEIGHT,
-      parent: 'game-container',
-      backgroundColor: '#000000',
-      physics: {
-        default: 'arcade',
-        arcade: {
-          gravity: { y: GAME_CONFIG.GRAVITY },
-          debug: false
-        }
-      },
-      scene: [
-        LoadingScene,
-        MainMenuScene,
-        OptionsMenuScene,
-        MainScene,
-        GameOverScene,
-        PauseScene
-      ],
-      audio: {
-        disableWebAudio: false
-      },
-      render: {
-        pixelArt: false,
-        antialias: true
-      }
-    };
+    // シーン登録ヘルパー
+    this.sceneHelper = null;
+    
+    // ゲーム設定
+    this.config = null;
     
     // Phaserインスタンス
     this.Phaser = null;
     
-    // ゲームインスタンスは初期化時には作成しない
+    // ゲームインスタンス
     this.instance = null;
     
     // シーン間でのデータ共有用
@@ -85,15 +144,9 @@ export class Game {
     // デバッグモード設定
     this.debugMode = process.env.NODE_ENV !== 'production';
     
-    // デバッグモード時はPhysicsのデバッグも有効に
-    if (this.debugMode) {
-      this.config.physics.arcade.debug = true;
-      
-      // コンソールにゲームインスタンスを露出（デバッグ用）
-      if (typeof window !== 'undefined') {
-        window.game = this;
-      }
-      
+    // デバッグモード時はコンソールにゲームインスタンスを露出
+    if (this.debugMode && typeof window !== 'undefined') {
+      window.game = this;
       console.log('🎮 デバッグモードが有効です');
     }
   }
@@ -120,15 +173,7 @@ export class Game {
     try {
       // Phaserを動的にインポート
       const module = await import('phaser');
-      this.Phaser = module.default;
-      
-      // Phaserが読み込まれたので、設定を完成させる
-      this.config.type = this.Phaser.AUTO;
-      this.config.scale = {
-        mode: this.Phaser.Scale.FIT,
-        autoCenter: this.Phaser.Scale.CENTER_BOTH
-      };
-      
+      this.Phaser = module.default || module;
       return this.Phaser;
     } catch (error) {
       console.error('Failed to load Phaser:', error);
@@ -138,28 +183,11 @@ export class Game {
   
   /**
    * ゲームを初期化して起動する
+   * @param {Object} customConfig - カスタム設定（オプション）
+   * @returns {Promise<Game>} 初期化されたGameインスタンス
    */
-  async init() {
-    if (!this.instance) {
-      // Phaserを動的にロード
-      const Phaser = await this.loadPhaser();
-      if (!Phaser) {
-        console.error('Phaser could not be loaded. Game initialization failed.');
-        return this;
-      }
-      
-      // ゲームインスタンスを作成
-      this.instance = new Phaser.Game(this.config);
-      
-      // ゲーム設定の適用
-      this.settings.applySettings(this.instance);
-      
-      // リサイズイベントのハンドラを設定
-      if (typeof window !== 'undefined') {
-        window.addEventListener('resize', this.onResize.bind(this));
-      }
-    }
-    return this;
+  async init(customConfig = {}) {
+    return Game.initialize(customConfig);
   }
   
   /**
@@ -186,7 +214,10 @@ export class Game {
     if (this.instance) {
       this.instance.destroy(true);
       this.instance = null;
-      window.removeEventListener('resize', this.onResize);
+      
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', this.onResize);
+      }
     }
   }
   
@@ -297,4 +328,55 @@ export class Game {
       return null;
     }
   }
+}
+
+// アプリケーションのエントリーポイント（オプション）
+if (typeof window !== 'undefined' && !window.gameInitialized) {
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      // ローディング表示（オプション）
+      const loadingElement = document.createElement('div');
+      loadingElement.textContent = 'ゲームを読み込んでいます...';
+      loadingElement.style.position = 'absolute';
+      loadingElement.style.top = '50%';
+      loadingElement.style.left = '50%';
+      loadingElement.style.transform = 'translate(-50%, -50%)';
+      loadingElement.style.fontSize = '24px';
+      loadingElement.style.color = 'white';
+      
+      const container = document.getElementById('game-container') || document.body;
+      container.appendChild(loadingElement);
+      
+      // ゲーム初期化
+      await Game.initialize();
+      
+      // ローディング表示を削除
+      container.removeChild(loadingElement);
+      
+      // 初期化フラグの設定
+      window.gameInitialized = true;
+    } catch (error) {
+      console.error('ゲーム初期化エラー:', error);
+      
+      // エラーメッセージを表示
+      const errorElement = document.createElement('div');
+      errorElement.innerHTML = `
+        <h3>ゲームの読み込みに失敗しました</h3>
+        <p>${error.message}</p>
+        <button onclick="location.reload()">再試行</button>
+      `;
+      errorElement.style.position = 'absolute';
+      errorElement.style.top = '50%';
+      errorElement.style.left = '50%';
+      errorElement.style.transform = 'translate(-50%, -50%)';
+      errorElement.style.textAlign = 'center';
+      errorElement.style.padding = '20px';
+      errorElement.style.background = 'rgba(200, 0, 0, 0.8)';
+      errorElement.style.color = 'white';
+      errorElement.style.borderRadius = '8px';
+      
+      const container = document.getElementById('game-container') || document.body;
+      container.appendChild(errorElement);
+    }
+  });
 }

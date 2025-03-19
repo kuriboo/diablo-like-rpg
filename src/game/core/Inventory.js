@@ -1,4 +1,18 @@
-import Phaser from 'phaser';
+// Phaserを動的にロードするための変数とヘルパー関数
+let Phaser = null;
+async function loadPhaser() {
+  if (typeof window === 'undefined') return null;
+  if (Phaser) return Phaser;
+  
+  try {
+    const module = await import('phaser');
+    Phaser = module.default;
+    return Phaser;
+  } catch (error) {
+    console.error('Failed to load Phaser:', error);
+    return null;
+  }
+}
 
 export default class Inventory {
   constructor(owner, config = {}) {
@@ -21,8 +35,42 @@ export default class Inventory {
     // ジュエル（特殊アイテム）リスト
     this.jewelList = config.jewelList || [];
     
-    // インベントリ変更イベント
-    this.events = new Phaser.Events.EventEmitter();
+    // インベントリ変更イベント - カスタムイベントエミッター作成
+    this.initializeEventEmitter();
+  }
+
+  // イベントエミッターの初期化
+  async initializeEventEmitter() {
+    // Phaserをロード
+    Phaser = await loadPhaser();
+    
+    if (Phaser && Phaser.Events) {
+      this.events = new Phaser.Events.EventEmitter();
+    } else {
+      // フォールバック: シンプルなイベントエミッター実装
+      this.events = {
+        _listeners: {},
+        emit: function(event, ...args) {
+          if (!this._listeners[event]) return;
+          this._listeners[event].forEach(listener => listener(...args));
+        },
+        on: function(event, callback) {
+          if (!this._listeners[event]) this._listeners[event] = [];
+          this._listeners[event].push(callback);
+        },
+        once: function(event, callback) {
+          const onceCallback = (...args) => {
+            callback(...args);
+            this.off(event, onceCallback);
+          };
+          this.on(event, onceCallback);
+        },
+        off: function(event, callback) {
+          if (!this._listeners[event]) return;
+          this._listeners[event] = this._listeners[event].filter(listener => listener !== callback);
+        }
+      };
+    }
   }
   
   // アイテムの追加

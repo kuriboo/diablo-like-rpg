@@ -1,11 +1,10 @@
-import Phaser from 'phaser';
 import { getRandomInt } from '../../utils/mathUtils';
 
 /**
  * 障害物クラス
  * マップ上に配置される破壊可能/不可能な障害物を表現する
  */
-export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
+export default class Obstacle {
   /**
    * コンストラクタ
    * @param {Phaser.Scene} scene - シーンオブジェクト
@@ -15,7 +14,12 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
    * @param {object} config - 設定オブジェクト
    */
   constructor(scene, x, y, texture, config = {}) {
-    super(scene, x, y, texture);
+    this.scene = scene;
+    this._x = x;
+    this._y = y;
+    
+    // スプライトをメンバーとして作成
+    this.sprite = scene.physics.add.sprite(x, y, texture);
     
     // 基本プロパティ
     this.obstacleType = config.obstacleType || 'generic';
@@ -23,7 +27,7 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.description = config.description || '';
     
     // 物理特性の設定
-    scene.physics.world.enable(this);
+    this.body = this.sprite.body;
     this.body.immovable = true;
     this.body.moves = false;
     
@@ -52,7 +56,7 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.onInteract = config.onInteract || null;
     
     // 表示の初期化
-    this.setOrigin(0.5, 0.5);
+    this.sprite.setOrigin(0.5, 0.5);
     
     // 影の追加（オプション）
     if (config.addShadow) {
@@ -73,6 +77,99 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     if (this.showHealthBar && this.breakable) {
       this.createHealthBar();
     }
+  }
+  
+  // 位置プロパティのゲッターとセッター
+  get x() {
+    return this._x;
+  }
+  
+  set x(value) {
+    this._x = value;
+    if (this.sprite) this.sprite.x = value;
+  }
+  
+  get y() {
+    return this._y;
+  }
+  
+  set y(value) {
+    this._y = value;
+    if (this.sprite) this.sprite.y = value;
+  }
+  
+  // アルファ値のゲッターとセッター
+  get alpha() {
+    return this.sprite ? this.sprite.alpha : 1;
+  }
+  
+  set alpha(value) {
+    if (this.sprite) this.sprite.alpha = value;
+  }
+  
+  // 幅と高さのゲッター
+  get width() {
+    return this.sprite ? this.sprite.width : 0;
+  }
+  
+  get height() {
+    return this.sprite ? this.sprite.height : 0;
+  }
+  
+  // 深度のゲッターとセッター
+  get depth() {
+    return this.sprite ? this.sprite.depth : 0;
+  }
+  
+  set depth(value) {
+    if (this.sprite) this.sprite.setDepth(value);
+  }
+  
+  // スプライト関連のメソッドの委譲
+  setOrigin(x, y) {
+    if (this.sprite) this.sprite.setOrigin(x, y);
+    return this;
+  }
+  
+  setTint(tint) {
+    if (this.sprite) this.sprite.setTint(tint);
+    return this;
+  }
+  
+  clearTint() {
+    if (this.sprite) this.sprite.clearTint();
+    return this;
+  }
+  
+  setTexture(key, frame) {
+    if (this.sprite) this.sprite.setTexture(key, frame);
+    return this;
+  }
+  
+  // アニメーション関連のメソッドの委譲
+  get anims() {
+    return this.sprite ? this.sprite.anims : null;
+  }
+  
+  // イベント発火の委譲
+  emit(event, ...args) {
+    if (this.sprite) {
+      this.sprite.emit(event, ...args);
+    }
+  }
+  
+  on(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.on(event, callback, context);
+    }
+    return this;
+  }
+  
+  once(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.once(event, callback, context);
+    }
+    return this;
   }
   
   /**
@@ -138,11 +235,11 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.state = 'broken';
     
     // 破壊アニメーションがあれば再生
-    if (this.scene.anims.exists(`obstacle_${this.obstacleType}_break`)) {
-      this.anims.play(`obstacle_${this.obstacleType}_break`, true);
+    if (this.sprite && this.sprite.anims && this.scene.anims.exists(`obstacle_${this.obstacleType}_break`)) {
+      this.sprite.anims.play(`obstacle_${this.obstacleType}_break`, true);
       
       // アニメーション完了後に破壊処理
-      this.once('animationcomplete', () => {
+      this.sprite.once('animationcomplete', () => {
         this.completeBreak(source);
       });
     } else {
@@ -163,7 +260,9 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     this.dropLoot();
     
     // 物理ボディの無効化
-    this.body.enable = false;
+    if (this.body) {
+      this.body.enable = false;
+    }
     
     // 破壊音の再生
     if (this.scene.sound && this.scene.sound.get(this.breakSound)) {
@@ -181,7 +280,7 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     
     // フェードアウトして削除
     this.scene.tweens.add({
-      targets: this,
+      targets: this.sprite,
       alpha: 0,
       duration: 500,
       onComplete: () => {
@@ -276,7 +375,7 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
    */
   showDamagedState() {
     // ダメージフレームがある場合は切り替え
-    const damageFrameKey = `${this.texture.key}_damaged`;
+    const damageFrameKey = `${this.sprite.texture.key}_damaged`;
     
     if (this.scene.textures.exists(damageFrameKey)) {
       this.setTexture(damageFrameKey);
@@ -303,7 +402,7 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
     
     // 小さな揺れエフェクト
     this.scene.tweens.add({
-      targets: this,
+      targets: this.sprite,
       x: this.x + getRandomInt(-3, 3),
       y: this.y + getRandomInt(-2, 2),
       duration: 50,
@@ -440,5 +539,28 @@ export default class Obstacle extends Phaser.Physics.Arcade.Sprite {
       interactive: this.interactive,
       durability: this.breakable ? `${this.durability}/${this.maxDurability}` : 'N/A'
     };
+  }
+  
+  /**
+   * リソースの解放
+   */
+  destroy() {
+    // シャドウの削除
+    if (this.shadow) {
+      this.shadow.destroy();
+    }
+    
+    // ヘルスバーの削除
+    if (this.healthBarBg) {
+      this.healthBarBg.destroy();
+    }
+    if (this.healthBar) {
+      this.healthBar.destroy();
+    }
+    
+    // スプライトの削除
+    if (this.sprite) {
+      this.sprite.destroy();
+    }
   }
 }

@@ -1,5 +1,5 @@
 import Character from './Character';
-import { getRandomInt } from '../../utils/mathUtils';
+import { getDistance } from '../../utils/mathUtils';
 
 export default class Companion extends Character {
   constructor(scene, x, y, texture, config = {}) {
@@ -147,7 +147,7 @@ export default class Companion extends Character {
   // 追従状態の更新
   updateFollowState(time, delta) {
     // プレイヤーとの距離
-    const distanceToPlayer = Phaser.Math.Distance.Between(
+    const distanceToPlayer = getDistance(
       this.x, this.y, this.player.x, this.player.y
     );
     
@@ -194,7 +194,7 @@ export default class Companion extends Character {
     }
     
     // プレイヤーとの距離
-    const distanceToPlayer = Phaser.Math.Distance.Between(
+    const distanceToPlayer = getDistance(
       this.x, this.y, this.player.x, this.player.y
     );
     
@@ -205,7 +205,7 @@ export default class Companion extends Character {
     }
     
     // ターゲットとの距離
-    const distanceToTarget = Phaser.Math.Distance.Between(
+    const distanceToTarget = getDistance(
       this.x, this.y, this.target.x, this.target.y
     );
     
@@ -248,7 +248,7 @@ export default class Companion extends Character {
   // 戻り状態の更新
   updateReturnState(time, delta) {
     // プレイヤーとの距離
-    const distanceToPlayer = Phaser.Math.Distance.Between(
+    const distanceToPlayer = getDistance(
       this.x, this.y, this.player.x, this.player.y
     );
     
@@ -277,7 +277,7 @@ export default class Companion extends Character {
       if (enemy.isDead) continue;
       
       // 敵との距離
-      const distanceToEnemy = Phaser.Math.Distance.Between(
+      const distanceToEnemy = getDistance(
         this.x, this.y, enemy.x, enemy.y
       );
       

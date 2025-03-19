@@ -1,5 +1,5 @@
 import Character from './Character';
-import { getRandomInt } from '../../utils/mathUtils';
+import { getRandomInt, getDistance } from '../../utils/mathUtils';
 import EnemyAI from '../ai/EnemyAI';
 
 export default class Enemy extends Character {
@@ -293,8 +293,8 @@ export default class Enemy extends Character {
     const player = this.scene.player;
     
     if (player && !player.isDead) {
-      const distanceToPlayer = Phaser.Math.Distance.Between(
-        this.x, this.y, player.x, player.y
+      const distanceToPlayer = getDistance(
+        this.x, this.y, this.player.x, this.player.y
       );
       
       // アグロ範囲内ならプレイヤーを追跡
@@ -318,7 +318,7 @@ export default class Enemy extends Character {
     const player = this.scene.player;
     
     if (player && !player.isDead) {
-      const distanceToPlayer = Phaser.Math.Distance.Between(
+      const distanceToPlayer = getDistance(
         this.x, this.y, player.x, player.y
       );
       
@@ -353,7 +353,7 @@ export default class Enemy extends Character {
     }
     
     // ポイントへの移動
-    const distanceToPoint = Phaser.Math.Distance.Between(
+    const distanceToPoint = getDistance(
       this.x, this.y, currentPoint.x, currentPoint.y
     );
     
@@ -378,12 +378,12 @@ export default class Enemy extends Character {
     }
     
     // ターゲットとの距離
-    const distanceToTarget = Phaser.Math.Distance.Between(
+    const distanceToTarget = getDistance(
       this.x, this.y, this.target.x, this.target.y
     );
     
     // 初期位置との距離
-    const distanceToHome = Phaser.Math.Distance.Between(
+    const distanceToHome = getDistance(
       this.x, this.y, this.homePosition.x, this.homePosition.y
     );
     
@@ -413,7 +413,7 @@ export default class Enemy extends Character {
     }
     
     // ターゲットとの距離
-    const distanceToTarget = Phaser.Math.Distance.Between(
+    const distanceToTarget = getDistance(
       this.x, this.y, this.target.x, this.target.y
     );
     
@@ -434,7 +434,7 @@ export default class Enemy extends Character {
   // 撤退状態の更新
   updateRetreatState(time, delta) {
     // 初期位置との距離
-    const distanceToHome = Phaser.Math.Distance.Between(
+    const distanceToHome = getDistance(
       this.x, this.y, this.homePosition.x, this.homePosition.y
     );
     
@@ -471,7 +471,7 @@ export default class Enemy extends Character {
       if (enemy === this || enemy.target || enemy.isDead) continue;
       
       // 距離チェック
-      const distance = Phaser.Math.Distance.Between(
+      const distance = getDistance(
         this.x, this.y, enemy.x, enemy.y
       );
       
@@ -541,7 +541,7 @@ export default class Enemy extends Character {
       
       // 状態の更新
       if (this.target && !this.target.isDead) {
-        const distanceToTarget = Phaser.Math.Distance.Between(
+        const distanceToTarget = getDistance(
           this.x, this.y, this.target.x, this.target.y
         );
         

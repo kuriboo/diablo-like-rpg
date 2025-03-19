@@ -1,5 +1,4 @@
 // Phaserの静的インポートを動的インポートに変更
-// import Phaser from 'phaser';
 import { v4 as uuidv4 } from 'uuid';
 import { CharacterClassType } from '../../constants/characterTypes';
 import { getDistance } from '../../utils/mathUtils';
@@ -20,10 +19,16 @@ async function loadPhaser() {
   }
 }
 
-
-export default class Character extends Phaser.GameObjects.Sprite {
+export default class Character {
   constructor(scene, x, y, texture, config = {}) {
-    super(scene, x, y, texture);
+    this.scene = scene;
+    
+    // スプライトをメンバーとして作成
+    this.sprite = scene.add.sprite(x, y, texture);
+    
+    // 位置情報の保持
+    this._x = x;
+    this._y = y;
     
     // 基本情報
     this.uuid = uuidv4();
@@ -102,13 +107,14 @@ export default class Character extends Phaser.GameObjects.Sprite {
     this.direction = 'down'; // down, up, left, right
     this.animationState = 'idle'; // idle, walk, attack, hurt, death
     
-    // 表示設定
-    this.setOrigin(0.5, 0.5);
-    this.setInteractive();
-    this.setScale(1);
+    // スプライトの表示設定
+    this.sprite.setOrigin(0.5, 0.5);
+    this.sprite.setInteractive();
+    this.sprite.setScale(1);
     
     // 衝突領域の設定
-    scene.physics.world.enable(this);
+    scene.physics.world.enable(this.sprite);
+    this.body = this.sprite.body;
     this.body.setCollideWorldBounds(true);
     this.body.setSize(32, 32);
     this.body.setOffset(16, 32);
@@ -117,12 +123,99 @@ export default class Character extends Phaser.GameObjects.Sprite {
     this.healthBar = this.createHealthBar();
     
     // イベントリスナー
-    this.on('pointerdown', this.onClick);
-    this.on('pointerover', this.onHover);
-    this.on('pointerout', this.onHoverEnd);
+    this.sprite.on('pointerdown', () => this.onClick());
+    this.sprite.on('pointerover', () => this.onHover());
+    this.sprite.on('pointerout', () => this.onHoverEnd());
     
     // 更新処理
     scene.events.on('update', this.update, this);
+  }
+  
+  // 位置プロパティのゲッターとセッター
+  get x() {
+    return this._x;
+  }
+  
+  set x(value) {
+    this._x = value;
+    if (this.sprite) this.sprite.x = value;
+  }
+  
+  get y() {
+    return this._y;
+  }
+  
+  set y(value) {
+    this._y = value;
+    if (this.sprite) this.sprite.y = value;
+  }
+  
+  // アルファ値のゲッターとセッター
+  get alpha() {
+    return this.sprite ? this.sprite.alpha : 1;
+  }
+  
+  set alpha(value) {
+    if (this.sprite) this.sprite.alpha = value;
+  }
+  
+  // スプライト関連のメソッドの委譲
+  setOrigin(x, y) {
+    if (this.sprite) this.sprite.setOrigin(x, y);
+    return this;
+  }
+  
+  setInteractive(options) {
+    if (this.sprite) this.sprite.setInteractive(options);
+    return this;
+  }
+  
+  disableInteractive() {
+    if (this.sprite) this.sprite.disableInteractive();
+    return this;
+  }
+  
+  setScale(value) {
+    if (this.sprite) this.sprite.setScale(value);
+    return this;
+  }
+  
+  setTint(tint) {
+    if (this.sprite) this.sprite.setTint(tint);
+    return this;
+  }
+  
+  clearTint() {
+    if (this.sprite) this.sprite.clearTint();
+    return this;
+  }
+  
+  // イベント発火の委譲
+  emit(event, ...args) {
+    if (this.sprite) {
+      this.sprite.emit(event, ...args);
+    }
+  }
+  
+  on(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.on(event, callback, context);
+    }
+    return this;
+  }
+  
+  once(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.once(event, callback, context);
+    }
+    return this;
+  }
+  
+  off(event, callback, context) {
+    if (this.sprite) {
+      this.sprite.off(event, callback, context);
+    }
+    return this;
   }
   
   // 最大ライフの計算
@@ -521,12 +614,14 @@ export default class Character extends Phaser.GameObjects.Sprite {
   
   // アニメーションの再生
   playAnimation() {
+    if (!this.sprite || !this.sprite.anims) return;
+    
     // 状態と方向に基づいたアニメーション名を生成
     const animName = `${this.constructor.name.toLowerCase()}_${this.animationState}_${this.direction}`;
     
     // アニメーションが存在する場合のみ再生
-    if (this.anims.exists(animName)) {
-      this.anims.play(animName, true);
+    if (this.sprite.anims.exists(animName)) {
+      this.sprite.anims.play(animName, true);
     }
   }
   
@@ -987,7 +1082,7 @@ export default class Character extends Phaser.GameObjects.Sprite {
     
     // 被ダメージ時の点滅エフェクト
     this.scene.tweens.add({
-      targets: this,
+      targets: this.sprite,
       alpha: 0.5,
       duration: 100,
       yoyo: true,
@@ -1048,7 +1143,7 @@ export default class Character extends Phaser.GameObjects.Sprite {
     // 一定時間後にフェードアウト
     this.scene.time.delayedCall(2000, () => {
       this.scene.tweens.add({
-        targets: [this, this.healthBar],
+        targets: [this.sprite, this.healthBar],
         alpha: 0,
         duration: 1000,
         onComplete: () => {
@@ -1722,6 +1817,9 @@ export default class Character extends Phaser.GameObjects.Sprite {
       this.healthBar.destroy();
     }
     
-    super.destroy();
+    // スプライトの削除
+    if (this.sprite) {
+      this.sprite.destroy();
+    }
   }
 }

@@ -8,10 +8,11 @@ export const SCENES = {
     PRELOAD: 'PreloadScene',
     MAIN_MENU: 'MainMenuScene',
     OPTIONS_MENU: 'OptionsMenuScene',
-    GAME: 'GameScene',
+    GAME: 'MainScene',
     GAME_OVER: 'GameOverScene',
     PAUSE: 'PauseScene',
-    LOADING: 'LoadingScene'
+    LOADING: 'LoadingScene',
+    UI: 'UIScene'
   };
   
   /**
