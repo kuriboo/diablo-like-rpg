@@ -854,6 +854,45 @@ export default class TopDownMap {
     console.warn('No walkable position found, returning (0,0)');
     return { x: 0, y: 0 };
   }
+
+  /**
+   * 指定された座標がマップの境界内にあるかどうかを判定します
+   * @param {number} x - 検証するX座標
+   * @param {number} y - 検証するY座標
+   * @returns {boolean} 境界内にある場合はtrue、境界外の場合はfalse
+   */
+  isInBounds(x, y) {
+    // マップのサイズを取得
+    // tilemap.widthInPixels と tilemap.heightInPixels を使用して境界をチェック
+    if (!this.tilemap) return false;
+    
+    // タイルマップのピクセルサイズを取得
+    const mapWidth = this.tilemap.widthInPixels;
+    const mapHeight = this.tilemap.heightInPixels;
+    
+    // 境界チェック
+    return (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight);
+  }
+
+  /**
+   * 指定された座標が障害物（衝突タイル）と衝突するかどうかを判定します
+   * @param {number} x - 検証するX座標
+   * @param {number} y - 検証するY座標
+   * @returns {boolean} 衝突する場合はtrue、衝突しない場合はfalse
+   */
+  isColliding(x, y) {
+    if (!this.tilemap || !this.collisionLayer) return false;
+    
+    // 座標をタイル座標に変換
+    const tileX = this.tilemap.worldToTileX(x);
+    const tileY = this.tilemap.worldToTileY(y);
+    
+    // 衝突レイヤーでタイルが存在するか確認
+    const tile = this.collisionLayer.getTileAt(tileX, tileY);
+    
+    // タイルが存在し、そのタイルが衝突プロパティを持っている場合は衝突と判断
+    return tile !== null && tile.properties && tile.properties.collides;
+  }
   
   // マップを更新
   update() {

@@ -117,6 +117,9 @@ export default class UIScene {
 
         //通知テキスト
         this.notificationText = null;
+
+        this.menuGroup.setVisible(false);
+        this.menuOpen = false;
       }
       
       init(data) {
@@ -842,17 +845,46 @@ export default class UIScene {
         console.log('Show settings');
       }
       
+      /**
+       * ショートカットメッセージ表示用の強化メソッド
+       */
       showMessage(message, duration = 3000) {
         // メッセージ表示
         if (this.messageTimer) {
           clearTimeout(this.messageTimer);
         }
         
+        // メッセージテキストがない場合は作成
+        if (!this.messageText) {
+          this.messageText = this.add.text(
+            this.scale.width / 2,
+            this.scale.height / 4,
+            '',
+            {
+              fontSize: '20px',
+              fill: '#ffffff',
+              stroke: '#000000',
+              strokeThickness: 3,
+              backgroundColor: '#00000080',
+              padding: {
+                x: 10,
+                y: 5
+              }
+            }
+          ).setOrigin(0.5, 0.5);
+          
+          // 高いデプス値を設定して確実に画面上に表示されるようにする
+          this.messageText.setDepth(1001);
+        }
+        
         this.messageText.setText(message);
         this.messageText.setVisible(true);
         
+        // タイマー設定
         this.messageTimer = setTimeout(() => {
-          this.messageText.setVisible(false);
+          if (this.messageText) {
+            this.messageText.setVisible(false);
+          }
         }, duration);
       }
       
@@ -1313,6 +1345,38 @@ export default class UIScene {
       }
 
       /**
+       * ポーションカウンター更新メソッド（Character用）
+       */
+      updatePotionCounter(character) {
+        if (!character) return;
+        
+        // ポーションカウンターが未作成の場合は作成
+        if (!this.potionCounters) {
+          this.potionCounters = {
+            health: this.add.text(10, 95, 'HP Potion: 0', {
+              fontSize: '14px',
+              fill: '#ff8888',
+              stroke: '#000000',
+              strokeThickness: 2
+            }),
+            mana: this.add.text(10, 115, 'MP Potion: 0', {
+              fontSize: '14px',
+              fill: '#8888ff',
+              stroke: '#000000',
+              strokeThickness: 2
+            })
+          };
+        }
+        
+        // ポーションカウンターの更新
+        const healthPotions = character.healthPotions || 0;
+        const manaPotions = character.manaPotions || 0;
+        
+        this.potionCounters.health.setText(`HP Potion: ${healthPotions}`);
+        this.potionCounters.mana.setText(`MP Potion: ${manaPotions}`);
+      }
+
+      /**
        * 売却用インベントリ表示
        * @param {NPC} npc - ショップNPC
        */
@@ -1563,6 +1627,17 @@ export default class UIScene {
             this.notificationText = null;
           }
         });
+      }
+
+      resetMenuState() {
+        if (this.menuGroup) {
+          this.menuGroup.setVisible(false);
+          this.menuOpen = false;
+        }
+        // 必要であればMainSceneを再開
+        if (this.scene.isPaused('MainScene')) {
+          this.scene.resume('MainScene');
+        }
       }
     }
     

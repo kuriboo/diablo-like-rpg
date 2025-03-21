@@ -294,7 +294,7 @@ export default class Enemy extends Character {
     
     if (player && !player.isDead) {
       const distanceToPlayer = getDistance(
-        this.x, this.y, this.player.x, this.player.y
+        this.x, this.y, player.x, player.y
       );
       
       // アグロ範囲内ならプレイヤーを追跡

@@ -38,6 +38,7 @@ import Debug from '../../../debug';
 import PlaceholderAssets from '../../../debug/PlaceholderAssets';
 import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
 import { SCENES } from '../constants';
+import { getDistance } from '../../../utils/mathUtils';
 
 // ActionSystemのインポート
 import ActionSystem from '../../actions/ActionSystem';
@@ -265,6 +266,10 @@ export default class MainScene {
         
         // UIシーンの開始
         this.scene.launch('UIScene', { mainScene: this });
+        const uiScene = this.scene.get('UIScene');
+        if (uiScene && uiScene.resetMenuState) {
+          uiScene.resetMenuState();
+        }
         
         // イベントリスナーの設定
         this.setupEventListeners();
@@ -295,6 +300,8 @@ export default class MainScene {
             level: this.gameData.currentLevel,
             difficulty: this.gameData.difficulty
           });
+
+          this.scene.resume('MainScene');
         }
       }
       
@@ -805,7 +812,8 @@ export default class MainScene {
             // プレイヤーの位置をリセット
             const startPosition = this.topDownMap.getRandomWalkablePosition();
             const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
-            this.player.setPosition(worldPos.x, worldPos.y);
+            this.player.x(worldPos.x);
+            this.player.y(worldPos.y);
             
             console.log('Map regenerated');
           });
@@ -1104,6 +1112,68 @@ export default class MainScene {
           }
         }
       }
+
+      /**
+       * キャラクターが指定された位置に移動可能かどうかを判定します
+       * @param {number} x - 移動先のX座標
+       * @param {number} y - 移動先のY座標
+       * @param {Character} [character=null] - 移動するキャラクター（オプション）
+       * @returns {boolean} 移動可能な場合はtrue、不可能な場合はfalse
+       */
+      canMoveToPosition(x, y, character = null) {
+        // マップ境界チェック
+        if (this.topDownMap) {
+          // マップ境界外なら移動不可
+          if (!this.topDownMap.isInBounds(x, y)) {
+            return false;
+          }
+          
+          // 衝突チェック - マップの障害物と衝突する場合は移動不可
+          if (this.topDownMap.isColliding(x, y)) {
+            return false;
+          }
+        } else {
+          // マップがない場合はシーンの境界チェックのみ
+          const bounds = this.physics.world.bounds;
+          if (x < bounds.x || x > bounds.width || y < bounds.y || y > bounds.height) {
+            return false;
+          }
+        }
+        
+        // キャラクター同士の衝突チェック（オプショナル）
+        if (character && this.config.checkCharacterCollisions) {
+          // プレイヤーとの衝突
+          if (this.player && this.player !== character) {
+            const playerBounds = this.player.getBounds();
+            if (Phaser.Geom.Rectangle.Contains(playerBounds, x, y)) {
+              return false;
+            }
+          }
+          
+          // 敵との衝突
+          for (const enemy of this.enemies) {
+            if (enemy !== character && !enemy.isDead) {
+              const enemyBounds = enemy.getBounds();
+              if (Phaser.Geom.Rectangle.Contains(enemyBounds, x, y)) {
+                return false;
+              }
+            }
+          }
+          
+          // NPCとの衝突
+          for (const npc of this.npcs) {
+            if (npc !== character) {
+              const npcBounds = npc.getBounds();
+              if (Phaser.Geom.Rectangle.Contains(npcBounds, x, y)) {
+                return false;
+              }
+            }
+          }
+        }
+        
+        // すべてのチェックをパスした場合は移動可能
+        return true;
+      }
       
       /**
        * 最も近い敵を探す
@@ -1389,7 +1459,8 @@ export default class MainScene {
         // プレイヤーの位置をリセット
         const startPosition = this.topDownMap.getRandomWalkablePosition();
         const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
-        this.player.setPosition(worldPos.x, worldPos.y);
+        this.player.x=worldPos.x;
+        this.player.y=worldPos.y;
         
         // コンパニオンの位置も更新
         if (this.companions.length > 0) {
@@ -1397,7 +1468,8 @@ export default class MainScene {
             // プレイヤーの近くに配置
             const companionPos = this.topDownMap.getRandomWalkablePosition();
             const companionWorldPos = this.topDownMap.tileToWorldXY(companionPos.x, companionPos.y);
-            companion.setPosition(companionWorldPos.x, companionWorldPos.y);
+            companion.x=companionWorldPos.x;
+            companion.y=companionWorldPos.y;
           }
         }
         

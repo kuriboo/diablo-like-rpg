@@ -79,7 +79,7 @@ export default class Character {
     this.debuffs = [];
     
     // 移動関連
-    this.moveSpeed = 2;
+    this.moveSpeed = 10;
     this.isMoving = false;
     this.moveTarget = null;
     this.movePath = [];

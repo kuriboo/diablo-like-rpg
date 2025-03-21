@@ -2,8 +2,8 @@
  * ゲーム内のすべてのアクションを管理するシングルトンクラス
  * AIの行動、プレイヤーの行動、スキルなどを一元管理します
  */
-import { BasicAction } from './BasicAction';
-import { SpecialAction } from './SpecialAction';
+import BasicAction from './BasicAction';
+import SpecialAction from './SpecialAction';
 
 export default class ActionSystem {
     constructor() {
@@ -208,6 +208,25 @@ export default class ActionSystem {
           // 不明タイプはBasicActionを返す
           return new BasicAction('basic', config);
       }
+    }
+
+    /**
+     * 特定のエンティティが現在行動中かどうかを確認
+     * @param {Character} entity - 確認するエンティティ
+     * @returns {boolean} エンティティが行動中の場合はtrue
+     */
+    isEntityActing(entity) {
+        if (!entity) return false;
+        
+        // 実行中のアクションを確認
+        for (const action of this.currentActions.values()) {
+        if (action.owner === entity) {
+            return true;
+        }
+        }
+        
+        // キュー内のアクションも確認
+        return this.actionQueue.some(action => action.owner === entity);
     }
   
     /**
