@@ -2,6 +2,9 @@
  * ゲーム内のすべてのアクションを管理するシングルトンクラス
  * AIの行動、プレイヤーの行動、スキルなどを一元管理します
  */
+import { BasicAction } from './BasicAction';
+import { SpecialAction } from './SpecialAction';
+
 export default class ActionSystem {
     constructor() {
       // シングルトンインスタンス
@@ -181,8 +184,6 @@ export default class ActionSystem {
      * @returns {Action} 作成されたアクション
      */
     createAction(type, config = {}) {
-      // ActionFactory依存を削除し、直接インポート
-      const { BasicAction, SpecialAction } = require('../actions'); // 実際のパスに合わせる
       
       // シーンを設定
       config.scene = this.scene;

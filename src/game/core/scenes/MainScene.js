@@ -35,8 +35,11 @@ import SkillTreeManager from '../../skills/core/SkillTreeManager';
 import { PlayerStats } from '../../data/PlayerStats';
 import { Game } from '../../core/Game';
 import Debug from '../../../debug';
+import PlaceholderAssets from '../../../debug/PlaceholderAssets';
 import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
 import { SCENES } from '../constants';
+
+// ActionSystemのインポート
 import ActionSystem from '../../actions/ActionSystem';
 
 export default class MainScene {
@@ -70,9 +73,9 @@ export default class MainScene {
         this.characterFactory = null;
         this.itemFactory = null;
         this.actionFactory = null;
-
-        // ActionSystemの初期化
-        this.actionSystem = ActionSystem.getInstance().initialize(this);
+        
+        // アクションシステム
+        this.actionSystem = null;
         
         // ゲームデータ
         this.gameData = {
@@ -91,6 +94,9 @@ export default class MainScene {
         // 前のシーンからのデータ受け取り
         this.gameData = data.gameData || this.gameData;
         
+        // ActionSystemの初期化
+        this.actionSystem = ActionSystem.getInstance();
+        
         // ファクトリーの初期化
         this.characterFactory = new CharacterFactory(this);
         this.itemFactory = new ItemFactory(this);
@@ -106,10 +112,128 @@ export default class MainScene {
       preload() {
         // 必要なアセットの読み込み
         // (既にLoadingSceneで読み込まれているはず)
+        
+        // デバッグモードの場合、プレースホルダーアセットをロード
+        if (this.isDebugMode) {
+          //this.loadDebugAssets();
+        }
+      }
+      
+      /**
+       * デバッグ用のアセットをロード
+       */
+      loadDebugAssets() {
+        // プレースホルダーアセットの使用
+        const placeholders = PlaceholderAssets.placeholders;
+        
+        // 必要な画像をロード（存在するかチェックして）
+        // プレイヤー
+        if (placeholders.player) {
+          this.load.image('player_placeholder', placeholders.player);
+        }
+        
+        // 敵タイプ
+        if (placeholders.enemy_normal) {
+          this.load.image('enemy_normal_placeholder', placeholders.enemy_normal);
+        }
+        if (placeholders.enemy_elite) {
+          this.load.image('enemy_elite_placeholder', placeholders.enemy_elite);
+        }
+        if (placeholders.enemy_boss) {
+          this.load.image('enemy_boss_placeholder', placeholders.enemy_boss);
+        }
+        
+        // コンパニオン
+        if (placeholders.companion) {
+          this.load.image('companion_placeholder', placeholders.companion);
+        }
+        
+        // NPCタイプ
+        if (placeholders.npc_villager) {
+          this.load.image('npc_villager_placeholder', placeholders.npc_villager);
+        }
+        if (placeholders.npc_guard) {
+          this.load.image('npc_guard_placeholder', placeholders.npc_guard);
+        }
+        if (placeholders.npc_merchant) {
+          this.load.image('npc_merchant_placeholder', placeholders.npc_merchant);
+        }
+        if (placeholders.npc_blacksmith) {
+          this.load.image('npc_blacksmith_placeholder', placeholders.npc_blacksmith);
+        }
+        if (placeholders.npc_alchemist) {
+          this.load.image('npc_alchemist_placeholder', placeholders.npc_alchemist);
+        }
+        
+        // エフェクト
+        if (placeholders.slash_effect) {
+          this.load.spritesheet('slash_effect', placeholders.slash_effect, { 
+            frameWidth: 64, frameHeight: 64 
+          });
+        }
+        if (placeholders.impact_effect) {
+          this.load.spritesheet('impact_effect', placeholders.impact_effect, { 
+            frameWidth: 64, frameHeight: 64 
+          });
+        }
+        if (placeholders.skill_effect) {
+          this.load.spritesheet('skill_effect', placeholders.skill_effect, { 
+            frameWidth: 64, frameHeight: 64 
+          });
+        }
+        
+        // アイテム
+        if (placeholders.item_potion) {
+          this.load.image('item_potion_placeholder', placeholders.item_potion);
+        }
+        if (placeholders.item_weapon) {
+          this.load.image('item_weapon_placeholder', placeholders.item_weapon);
+        }
+        if (placeholders.item_armor) {
+          this.load.image('item_armor_placeholder', placeholders.item_armor);
+        }
+        
+        // UIエレメント
+        if (placeholders.ui_button) {
+          this.load.image('ui_button_placeholder', placeholders.ui_button);
+        }
+        
+        // デバッグ用のアニメーション設定
+        if (this.anims && placeholders.slash_effect) {
+          this.anims.create({
+            key: 'slash_anim',
+            frames: this.anims.generateFrameNumbers('slash_effect', { start: 0, end: 5 }),
+            frameRate: 15,
+            repeat: 0
+          });
+        }
+        
+        if (this.anims && placeholders.impact_effect) {
+          this.anims.create({
+            key: 'impact_anim',
+            frames: this.anims.generateFrameNumbers('impact_effect', { start: 0, end: 5 }),
+            frameRate: 15,
+            repeat: 0
+          });
+        }
+        
+        if (this.anims && placeholders.skill_effect) {
+          this.anims.create({
+            key: 'skill_anim',
+            frames: this.anims.generateFrameNumbers('skill_effect', { start: 0, end: 7 }),
+            frameRate: 15,
+            repeat: 0
+          });
+        }
+        
+        console.log('🎮 デバッグアセットをロード完了');
       }
       
       async create() {
         console.log('MainScene: create');
+        
+        // ActionSystemを初期化
+        this.actionSystem.initialize(this);
         
         // マップジェネレーターの作成（そのまま）
         this.mapGenerator = new MapGenerator({
@@ -162,6 +286,9 @@ export default class MainScene {
         if (this.isDebugMode) {
           Debug.initialize(this);
           
+          // 追加敵の生成（デバッグ用）
+          this.createDebugEnemies();
+          
           // ゲームの状態をコンソールに出力
           console.log('🎮 ゲーム状態:', {
             mapType: this.currentMapType,
@@ -176,9 +303,6 @@ export default class MainScene {
         if (this.fpsText) {
           this.fpsText.setText(`FPS: ${Math.round(1000 / delta)}`);
         }
-
-        // ActionSystemを直接更新する場合（通常は不要）
-        // this.actionSystem.update(time, delta);
         
         // マップの更新
         if (this.topDownMap) {
@@ -201,6 +325,8 @@ export default class MainScene {
             enemy.update(time, delta);
           }
         }
+        
+        // ActionSystem自体の更新は不要（イベントリスナーで自動更新）
         
         // カメラのアップデート
         this.updateCamera();
@@ -297,11 +423,15 @@ export default class MainScene {
           const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
           const playerClass = this.gameData.playerClass || 'warrior';
           
+          // デバッグモードの場合はプレースホルダーテクスチャを使用
+          const texture = this.isDebugMode ? 'player_placeholder' : (playerClass || 'warrior');
+          
           // プレイヤーキャラクターの作成 - パラメータを明示的に指定
           this.player = this.characterFactory.createPlayer({
             scene: this,
             x: worldPos.x,
             y: worldPos.y,
+            texture: texture,
             level: playerLevel,
             classType: {
               name: playerClass || 'warrior' // クラスタイプを明示的にオブジェクトとして渡す
@@ -315,6 +445,9 @@ export default class MainScene {
           // デプスソートは不要になるためコメントアウトまたは削除
           // TopDownでは単純なシーンのdepthプロパティで重なり順を制御
           this.player.setDepth(10); // キャラクターの深度を設定
+          
+          // プレイヤーに基本アクションを設定
+          this.setupPlayerActions();
           
           // プレイヤー作成イベント
           this.events.emit('player-created', this.player);
@@ -339,11 +472,15 @@ export default class MainScene {
             // ダミープレイヤーステータスの生成
             const playerStats = generatePlayerStats('warrior', 5, 'デバッグプレイヤー');
             
+            // デバッグモードの場合はプレースホルダーテクスチャを使用
+            const texture = 'player_placeholder';
+            
             // プレイヤーキャラクターの作成 - この場合も classType を明示的に指定
             this.player = this.characterFactory.createPlayer({
               scene: this,
               x: worldPos.x,
               y: worldPos.y,
+              texture: texture,
               level: playerStats.level,
               classType: {
                 name: playerStats.classType || 'warrior'
@@ -355,11 +492,43 @@ export default class MainScene {
             // 以下は通常の処理と同様...
             this.add.existing(this.player);
             this.player.setDepth(10);
+            this.setupPlayerActions();
             this.events.emit('player-created', this.player);
           } else {
             throw error; // 本番環境ではエラーを伝播
           }
         }
+      }
+      
+      /**
+       * プレイヤーの基本アクションを設定
+       */
+      setupPlayerActions() {
+        if (!this.player || !this.actionSystem) return;
+        
+        // プレイヤーの基本アクションを設定
+        const basicActions = {
+          move: this.actionSystem.createAction('move', {
+            owner: this.player,
+            topDownMap: this.topDownMap
+          }),
+          
+          attack: this.actionSystem.createAction('attack', {
+            owner: this.player,
+            attackRange: this.player.attackRange || 60,
+            attackCooldown: 800
+          }),
+          
+          idle: this.actionSystem.createAction('idle', {
+            owner: this.player,
+            duration: 1000
+          })
+        };
+        
+        // プレイヤーにアクションを登録
+        this.player.basicActions = basicActions;
+        
+        console.log('プレイヤーアクションを設定しました');
       }
       
       /**
@@ -394,11 +563,16 @@ export default class MainScene {
         // ワールド座標に変換
         const worldPos = this.topDownMap.tileToWorldXY(companionPos.x, companionPos.y);
         
+        // デバッグモードの場合はプレースホルダーテクスチャを使用
+        const texture = this.isDebugMode ? 'companion_placeholder' : 
+                         (this.gameData.companionType || 'rogue');
+        
         // コンパニオンの作成
         const companion = this.characterFactory.createCompanion({
           scene: this,
           x: worldPos.x,
           y: worldPos.y,
+          texture: texture,
           level: this.gameData.playerLevel || 1,
           type: this.gameData.companionType || 'rogue'
         });
@@ -412,10 +586,126 @@ export default class MainScene {
         // デプスの設定（デプスソートの代わり）
         companion.setDepth(10);
         
-        // コンパニオンにプレイヤーを認識させる
-        if (companion.ai) {
+        // ActionSystemを使った新しいAI設定
+        if (this.actionSystem) {
+          // 旧AIインスタンスがあれば無効化
+          if (companion.ai && companion.ai.setEnabled) {
+            companion.ai.setEnabled(false);
+          }
+          
+          // 新しいAIインスタンスの作成（実装済みの場合）
+          // companion.ai = new CompanionAI(companion, {}, this.actionSystem);
+          // companion.ai.setPlayer(this.player);
+        }
+        // 従来のAIシステム
+        else if (companion.ai) {
           companion.ai.setPlayer(this.player);
         }
+      }
+      
+      /**
+       * デバッグ用の敵を作成
+       */
+      createDebugEnemies() {
+        // デバッグモードでなければ何もしない
+        if (!this.isDebugMode || !this.player) return;
+        
+        // 敵の数を決定（5～10体）
+        const enemyCount = 5 + Math.floor(Math.random() * 6);
+        
+        for (let i = 0; i < enemyCount; i++) {
+          // プレイヤーから少し離れた位置を取得
+          const position = this.getRandomPositionAwayFromPlayer(200, 500);
+          if (!position) continue;
+          
+          // 敵のレベルを決定（プレイヤーレベル±2）
+          const level = Math.max(1, this.player.level + Math.floor(Math.random() * 5) - 2);
+          
+          // 敵タイプをランダムに決定
+          const enemyTypes = ['normal', 'elite', 'boss'];
+          const typeIndex = Math.random() < 0.7 ? 0 : (Math.random() < 0.85 ? 1 : 2);
+          const enemyType = enemyTypes[typeIndex];
+          
+          // プレースホルダーテクスチャを使用
+          const texture = `enemy_${enemyType}_placeholder`;
+          
+          // 敵キャラクターの作成
+          const enemy = this.characterFactory.createEnemy({
+            scene: this,
+            x: position.x,
+            y: position.y,
+            texture: texture,
+            level: level,
+            type: enemyType
+          });
+          
+          // ボスタイプなら大きくする
+          if (enemyType === 'boss') {
+            enemy.setScale(1.5);
+          } else if (enemyType === 'elite') {
+            enemy.setScale(1.2);
+          }
+          
+          // 敵をシーンに追加
+          this.add.existing(enemy);
+          
+          // 敵リストに追加
+          this.enemies.push(enemy);
+          
+          // デプスの設定
+          enemy.setDepth(10);
+          
+          // ActionSystemを使った新しいAI設定
+          if (this.actionSystem) {
+            // 旧AIインスタンスがあれば無効化
+            if (enemy.ai && enemy.ai.setEnabled) {
+              enemy.ai.setEnabled(false);
+            }
+            
+            // 新しいAIインスタンスの作成（実装済みの場合）
+            // enemy.ai = new EnemyAI(enemy, {}, this.actionSystem);
+          }
+        }
+        
+        console.log(`🎮 デバッグ用の敵を ${this.enemies.length} 体生成しました`);
+      }
+      
+      /**
+       * プレイヤーから一定距離離れたランダムな位置を取得
+       * @param {number} minDistance - 最小距離
+       * @param {number} maxDistance - 最大距離
+       * @returns {object|null} - 位置オブジェクトまたはnull
+       */
+      getRandomPositionAwayFromPlayer(minDistance, maxDistance) {
+        if (!this.player || !this.topDownMap) return null;
+        
+        // 最大10回試行
+        for (let i = 0; i < 10; i++) {
+          // ランダムな角度と距離
+          const angle = Math.random() * Math.PI * 2;
+          const distance = minDistance + Math.random() * (maxDistance - minDistance);
+          
+          // 位置を計算
+          const x = this.player.x + Math.cos(angle) * distance;
+          const y = this.player.y + Math.sin(angle) * distance;
+          
+          // タイル座標に変換
+          const tilePos = this.topDownMap.worldToTileXY(x, y);
+          
+          // 移動可能かチェック
+          if (this.topDownMap.isWalkableAt(tilePos.x, tilePos.y)) {
+            // ワールド座標に変換して返す
+            return this.topDownMap.tileToWorldXY(tilePos.x, tilePos.y);
+          }
+        }
+        
+        // 適切な位置が見つからなければランダムな位置を使用
+        const position = this.topDownMap.getRandomWalkablePosition();
+        if (position) {
+          return this.topDownMap.tileToWorldXY(position.x, position.y);
+        }
+        
+        return null;
       }
       
       /**
@@ -547,14 +837,20 @@ export default class MainScene {
               // ワールド座標に変換
               const worldPos = this.topDownMap.tileToWorldXY(npcPos.x, npcPos.y);
               
-              // NPCの生成
-              const npcType = ['villager', 'guard', 'merchant', 'blacksmith', 'alchemist'][Math.floor(Math.random() * 5)];
+              // NPCタイプをランダム選択
+              const npcTypes = ['villager', 'guard', 'merchant', 'blacksmith', 'alchemist'];
+              const npcType = npcTypes[Math.floor(Math.random() * npcTypes.length)];
               const isShop = Math.random() < 0.5;
               
+              // テクスチャ
+              const texture = `npc_${npcType}_placeholder`;
+              
+              // NPCの生成
               const npc = this.characterFactory.createNPC({
                 scene: this,
                 x: worldPos.x,
                 y: worldPos.y,
+                texture: texture,
                 type: npcType,
                 isShop: isShop,
                 dialogues: ['これはデバッグNPCです。', 'テスト用に生成されました。']
@@ -601,6 +897,7 @@ export default class MainScene {
                 scene: this,
                 x: worldPos.x,
                 y: worldPos.y,
+                texture: 'enemy_boss_placeholder',
                 level: this.player.level + 2,
                 type: 'boss'
               });
@@ -615,6 +912,17 @@ export default class MainScene {
               
               // デプスの設定
               boss.setDepth(10);
+              
+              // ActionSystemを使った新しいAI設定（実装済みの場合）
+              if (this.actionSystem) {
+                // 旧AIインスタンスがあれば無効化
+                if (boss.ai && boss.ai.setEnabled) {
+                  boss.ai.setEnabled(false);
+                }
+                
+                // 新しいAIインスタンスを設定
+                // boss.ai = new EnemyAI(boss, { aggressiveness: 0.9 }, this.actionSystem);
+              }
               
               console.log(`👹 デバッグボス追加: Lv.${boss.level}`);
             }
@@ -643,38 +951,45 @@ export default class MainScene {
             tileXY.x, tileXY.y
           );
           
-          // 経路が見つかった場合、移動アクションを実行
+          // 経路が見つかった場合
           if (path && path.length > 0) {
-            // 既存の移動アクションをキャンセル
-            this.actionSystem.cancelEntityActions(this.player);
-            
-            // パスをワールド座標に変換
-            const worldPath = path.map(p => {
-              const worldPos = this.topDownMap.tileToWorldXY(p.x, p.y);
-              return { x: worldPos.x, y: worldPos.y };
-            });
-            
-            // 新しい移動アクションを作成して実行
-            const moveAction = this.actionSystem.createAction('move', {
-              owner: this.player,
-              path: worldPath,
-              topDownMap: this.topDownMap
-            });
-            
-            this.actionSystem.queueAction(moveAction, true);
+            // ActionSystemが使用可能な場合
+            if (this.actionSystem) {
+              // 既存のアクションをキャンセル
+              this.actionSystem.cancelEntityActions(this.player);
+              
+              // パスをワールド座標に変換
+              const worldPath = path.map(p => {
+                const worldPos = this.topDownMap.tileToWorldXY(p.x, p.y);
+                return { x: worldPos.x, y: worldPos.y };
+              });
+              
+              // 移動アクションを作成して実行
+              const moveAction = this.actionSystem.createAction('move', {
+                owner: this.player,
+                path: worldPath,
+                topDownMap: this.topDownMap
+              });
+              
+              this.actionSystem.queueAction(moveAction, true);
+            }
+            // 従来の方法
+            else {
+              this.movePlayerAlongPath(path);
+            }
           }
         }
       }
       
       /**
-       * プレイヤーが経路に沿って移動
+       * プレイヤーが経路に沿って移動（従来の方法）
        */
       movePlayerAlongPath(path) {
         // 移動アクションを作成
         const moveAction = this.actionFactory.createBasicAction('move', {
           owner: this.player,
           path: path,
-          topDownMap: this.topDownMap // isometricMapからtopDownMapに変更
+          topDownMap: this.topDownMap
         });
         
         // 移動アクション実行
@@ -698,11 +1013,11 @@ export default class MainScene {
         
         if (entity) {
           // 敵の場合は攻撃
-          if (entity.type === 'enemy' || entity.ClassType?.name === 'Enemy') {
+          if (entity.type === 'enemy' || entity.classType?.name === 'Enemy') {
             this.attackTarget(entity);
           }
           // NPCの場合は会話
-          else if (entity.type === 'npc' || entity.ClassType?.name === 'NPC') {
+          else if (entity.type === 'npc' || entity.classType?.name === 'NPC') {
             this.interactWithNPC(entity);
           }
           // アイテム/宝箱の場合は取得
@@ -721,15 +1036,32 @@ export default class MainScene {
       attackTarget(target) {
         if (!this.player || !target) return;
         
-        // 攻撃アクションを作成
-        const attackAction = this.actionFactory.createBasicAction('attack', {
-          owner: this.player,
-          target: target
-        });
-        
-        // 攻撃アクション実行
-        if (attackAction) {
-          attackAction.play();
+        // ActionSystemが使用可能な場合
+        if (this.actionSystem) {
+          // 既存のアクションをキャンセル
+          this.actionSystem.cancelEntityActions(this.player);
+          
+          // 攻撃アクションを作成して実行
+          const attackAction = this.actionSystem.createAction('attack', {
+            owner: this.player,
+            target: target,
+            attackRange: this.player.attackRange || 60
+          });
+          
+          this.actionSystem.queueAction(attackAction, true);
+        }
+        // 従来の方法
+        else {
+          // 攻撃アクションを作成
+          const attackAction = this.actionFactory.createBasicAction('attack', {
+            owner: this.player,
+            target: target
+          });
+          
+          // 攻撃アクション実行
+          if (attackAction) {
+            attackAction.play();
+          }
         }
       }
       
@@ -746,13 +1078,29 @@ export default class MainScene {
         if (nearestEnemy) {
           this.attackTarget(nearestEnemy);
         } else {
-          // 敵がいない場合は空振り
-          const attackAction = this.actionFactory.createBasicAction('attack', {
-            owner: this.player
-          });
-          
-          if (attackAction) {
-            attackAction.play();
+          // ActionSystemが使用可能な場合
+          if (this.actionSystem) {
+            // 既存のアクションをキャンセル
+            this.actionSystem.cancelEntityActions(this.player);
+            
+            // 攻撃アクションを作成して実行（ターゲットなし）
+            const attackAction = this.actionSystem.createAction('attack', {
+              owner: this.player,
+              attackRange: this.player.attackRange || 60
+            });
+            
+            this.actionSystem.queueAction(attackAction, true);
+          }
+          // 従来の方法
+          else {
+            // 敵がいない場合は空振り
+            const attackAction = this.actionFactory.createBasicAction('attack', {
+              owner: this.player
+            });
+            
+            if (attackAction) {
+              attackAction.play();
+            }
           }
         }
       }
@@ -768,11 +1116,11 @@ export default class MainScene {
         
         for (const enemy of this.enemies) {
           if (enemy && !enemy.isDead) {
-            // Phaserのユーティリティを動的に使う方式に変更
-            // 以前: const dist = Phaser.Math.Distance.Between(...)
-            const dx = enemy.x - this.player.x;
-            const dy = enemy.y - this.player.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            // getDistance関数を使用
+            const dist = getDistance(
+              this.player.x, this.player.y,
+              enemy.x, enemy.y
+            );
             
             if (dist < minDistance) {
               minDistance = dist;
@@ -835,17 +1183,42 @@ export default class MainScene {
         if (skillIndex >= skillKeys.length) return;
         
         const skillKey = skillKeys[skillIndex];
-        const skillAction = this.player.specialActions.get(skillKey);
+        const skillData = this.player.specialActions.get(skillKey);
         
-        if (skillAction) {
-          // スキルのターゲットを設定（必要に応じて）
-          const nearestEnemy = this.findNearestEnemy();
-          if (nearestEnemy) {
-            skillAction.target = nearestEnemy;
+        if (skillData) {
+          // ActionSystemが使用可能な場合
+          if (this.actionSystem) {
+            // 既存のアクションをキャンセル
+            this.actionSystem.cancelEntityActions(this.player);
+            
+            // ターゲットを取得
+            const nearestEnemy = this.findNearestEnemy();
+            
+            // スキルアクションを作成
+            const skillAction = this.actionSystem.createAction('skill', {
+              owner: this.player,
+              target: nearestEnemy,
+              skillId: skillKey,
+              ...skillData // スキルデータをコピー
+            });
+            
+            this.actionSystem.queueAction(skillAction, true);
           }
-          
-          // スキル使用
-          skillAction.play();
+          // 従来の方法
+          else {
+            const skillAction = this.player.specialActions.get(skillKey);
+            
+            if (skillAction) {
+              // スキルのターゲットを設定（必要に応じて）
+              const nearestEnemy = this.findNearestEnemy();
+              if (nearestEnemy) {
+                skillAction.target = nearestEnemy;
+              }
+              
+              // スキル使用
+              skillAction.play();
+            }
+          }
           
           // スキル使用イベント
           this.events.emit('skill-used', { skillKey, skillAction });
@@ -925,13 +1298,38 @@ export default class MainScene {
         // スキルアクションの作成と設定
         for (const skill of unlockedSkills) {
           if (skill.type === 'skill') {
-            const skillAction = this.actionFactory.createSpecialAction(skill.id, {
-              owner: this.player,
-              scene: this
-            });
-            
-            if (skillAction) {
-              this.player.specialActions.set(skill.id, skillAction);
+            // ActionSystemが使用可能な場合
+            if (this.actionSystem) {
+              // スキルデータを作成
+              const skillData = {
+                skillId: skill.id,
+                name: skill.name,
+                description: skill.description,
+                manaCost: skill.manaCost || 10,
+                cooldown: skill.cooldown || 3000,
+                damage: skill.damage,
+                damageType: skill.damageType || 'physical',
+                range: skill.range || 100,
+                areaOfEffect: skill.areaOfEffect || 0,
+                effectType: skill.effectType,
+                effectValue: skill.effectValue,
+                effectDuration: skill.effectDuration || 0,
+                targetType: skill.targetType || 'enemy'
+              };
+              
+              // スキルデータを登録
+              this.player.specialActions.set(skill.id, skillData);
+            }
+            // 従来の方法
+            else {
+              const skillAction = this.actionFactory.createSpecialAction(skill.id, {
+                owner: this.player,
+                scene: this
+              });
+              
+              if (skillAction) {
+                this.player.specialActions.set(skill.id, skillAction);
+              }
             }
           }
         }
