@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * PatrolBehavior - キャラクターの巡回行動を制御
@@ -45,7 +46,7 @@ class PatrolBehavior {
     
     // ターゲットがある場合は巡回終了
     const target = controller.target;
-    if (target && target.Life > 0) {
+    if (target && target.life > 0) {
       this.state = NodeState.FAILURE;
       return this.state;
     }
@@ -79,7 +80,7 @@ class PatrolBehavior {
     }
     
     // ポイントとの距離を計算
-    const distance = this.calculateDistance(owner.position, currentPoint);
+    const distance = getDistance(owner.x, owner.y, currentPoint.x, currentPoint.y);
     
     // ポイントに到達した場合
     if (distance <= this.options.waypointRadius) {
@@ -118,8 +119,8 @@ class PatrolBehavior {
     this.patrolPoints = [];
     
     // キャラクターの現在位置を開始点として使用
-    const startX = character.position.x;
-    const startY = character.position.y;
+    const startX = character.x;
+    const startY = character.y;
     
     // ナビゲーションメッシュ
     const controller = character.controller;
@@ -165,8 +166,8 @@ class PatrolBehavior {
    */
   moveTowards(character, position, delta) {
     // 方向ベクトルを計算
-    const dx = position.x - character.position.x;
-    const dy = position.y - character.position.y;
+    const dx = position.x - character.x;
+    const dy = position.y - character.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -174,19 +175,19 @@ class PatrolBehavior {
     const dirY = dy / length;
     
     // 移動距離を計算
-    const speed = character.MoveSpeed * this.options.patrolSpeed;
+    const speed = character.moveSpeed * this.options.patrolSpeed;
     const moveDistance = speed * delta / 1000; // 秒単位に変換
     
     // 新しい位置を計算
-    const newX = character.position.x + dirX * moveDistance;
-    const newY = character.position.y + dirY * moveDistance;
+    const newX = character.x + dirX * moveDistance;
+    const newY = character.y + dirY * moveDistance;
     
     // キャラクターの位置を更新
     if (character.move) {
       character.move(newX, newY);
     } else {
-      character.position.x = newX;
-      character.position.y = newY;
+      character.x = newX;
+      character.y = newY;
     }
     
     // 移動方向を向く
@@ -194,18 +195,6 @@ class PatrolBehavior {
       const angle = Math.atan2(dy, dx);
       character.setDirection(angle);
     }
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

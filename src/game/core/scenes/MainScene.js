@@ -37,6 +37,7 @@ import { Game } from '../../core/Game';
 import Debug from '../../../debug';
 import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
 import { SCENES } from '../constants';
+import ActionSystem from '../../actions/ActionSystem';
 
 export default class MainScene {
   // 静的なシーンインスタンスを保持
@@ -69,6 +70,9 @@ export default class MainScene {
         this.characterFactory = null;
         this.itemFactory = null;
         this.actionFactory = null;
+
+        // ActionSystemの初期化
+        this.actionSystem = ActionSystem.getInstance().initialize(this);
         
         // ゲームデータ
         this.gameData = {
@@ -172,6 +176,9 @@ export default class MainScene {
         if (this.fpsText) {
           this.fpsText.setText(`FPS: ${Math.round(1000 / delta)}`);
         }
+
+        // ActionSystemを直接更新する場合（通常は不要）
+        // this.actionSystem.update(time, delta);
         
         // マップの更新
         if (this.topDownMap) {
@@ -638,7 +645,23 @@ export default class MainScene {
           
           // 経路が見つかった場合、移動アクションを実行
           if (path && path.length > 0) {
-            this.movePlayerAlongPath(path);
+            // 既存の移動アクションをキャンセル
+            this.actionSystem.cancelEntityActions(this.player);
+            
+            // パスをワールド座標に変換
+            const worldPath = path.map(p => {
+              const worldPos = this.topDownMap.tileToWorldXY(p.x, p.y);
+              return { x: worldPos.x, y: worldPos.y };
+            });
+            
+            // 新しい移動アクションを作成して実行
+            const moveAction = this.actionSystem.createAction('move', {
+              owner: this.player,
+              path: worldPath,
+              topDownMap: this.topDownMap
+            });
+            
+            this.actionSystem.queueAction(moveAction, true);
           }
         }
       }

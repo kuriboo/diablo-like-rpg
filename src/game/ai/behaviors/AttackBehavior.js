@@ -1,18 +1,19 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
- * AttackBehavior - Handles character attack actions against a target
+ * AttackBehavior - キャラクターのターゲットに対する攻撃行動を処理します
  */
 class AttackBehavior {
   /**
-   * Create a new attack behavior
-   * @param {object} options - Configuration options
+   * 新しい攻撃行動を作成します
+   * @param {object} options - 設定オプション
    */
   constructor(options = {}) {
     this.options = {
-      attackRange: 50, // Default attack range
-      attackCooldown: 1000, // Default cooldown in ms
-      preferredSkills: [], // List of preferred skill IDs to use
+      attackRange: 50, // デフォルトの攻撃範囲
+      attackCooldown: 1000, // デフォルトのクールダウン（ミリ秒）
+      preferredSkills: [], // 使用する優先スキルIDのリスト
       useBasicAttackWhenSkillsUnavailable: true,
       ...options
     };
@@ -22,51 +23,51 @@ class AttackBehavior {
   }
 
   /**
-   * Execute the attack behavior
-   * @param {AIController} controller - The AI controller
-   * @param {number} delta - Time since last update
-   * @returns {string} The resulting state
+   * 攻撃行動を実行します
+   * @param {AIController} controller - AIコントローラー
+   * @param {number} delta - 前回の更新からの経過時間
+   * @returns {string} 実行結果の状態
    */
   execute(controller, delta) {
     const owner = controller.owner;
     const target = controller.target;
     
-    // Validate owner and target
+    // 所有者とターゲットの検証
     if (!owner || !target) {
       this.state = NodeState.FAILURE;
       return this.state;
     }
     
-    // Check if target is alive
-    if (target.Life <= 0) {
+    // ターゲットが生きているかチェック
+    if (target.life <= 0) {
       controller.setTarget(null);
       this.state = NodeState.FAILURE;
       return this.state;
     }
     
-    // Calculate distance to target
-    const distance = this.calculateDistance(owner.position, target.position);
+    // ターゲットまでの距離を計算
+    const distance = getDistance(owner.x, owner.y, target.x, target.y);
     
-    // Check if target is in range
+    // ターゲットが射程内にいるかチェック
     if (distance > this.options.attackRange) {
       this.state = NodeState.FAILURE;
       return this.state;
     }
     
-    // Check attack cooldown
+    // 攻撃クールダウンをチェック
     const currentTime = Date.now();
     if (currentTime - this.lastAttackTime < this.options.attackCooldown) {
       this.state = NodeState.RUNNING;
       return this.state;
     }
     
-    // Try to use a skill first if we have preferred skills
+    // 優先スキルがあれば最初にスキルを使用しようとする
     let attackPerformed = false;
     
     if (this.options.preferredSkills.length > 0) {
       for (const skillId of this.options.preferredSkills) {
-        // Check if skill is available in the skill tree
-        const skill = this.findSkillInSkillTree(owner.SkillTree, skillId);
+        // スキルがスキルツリーで利用可能か確認
+        const skill = this.findSkillInSkillTree(owner.skillTree, skillId);
         
         if (skill && this.canUseSkill(owner, skill)) {
           this.useSkill(owner, target, skill);
@@ -76,13 +77,13 @@ class AttackBehavior {
       }
     }
     
-    // If no skill was used and we're allowed to use basic attack
+    // スキルが使用されず、基本攻撃の使用が許可されている場合
     if (!attackPerformed && this.options.useBasicAttackWhenSkillsUnavailable) {
       this.performBasicAttack(owner, target);
       attackPerformed = true;
     }
     
-    // Update attack time if an attack was performed
+    // 攻撃が実行された場合は攻撃時間を更新
     if (attackPerformed) {
       this.lastAttackTime = currentTime;
       this.state = NodeState.SUCCESS;
@@ -94,65 +95,65 @@ class AttackBehavior {
   }
 
   /**
-   * Perform a basic attack against the target
-   * @param {Character} attacker - The attacking character
-   * @param {Character} target - The target character
+   * ターゲットに対して基本攻撃を実行します
+   * @param {Character} attacker - 攻撃するキャラクター
+   * @param {Character} target - ターゲットキャラクター
    */
   performBasicAttack(attacker, target) {
-    // Get basic attack action from the character
+    // キャラクターから基本攻撃アクションを取得
     const basicAttackAction = this.getBasicAttackAction(attacker);
     
     if (basicAttackAction) {
-      // Set the target for the action
+      // アクションのターゲットを設定
       basicAttackAction.target = target;
       
-      // Execute the action
+      // アクションを実行
       basicAttackAction.play();
       
-      // Face the target
+      // ターゲットの方向を向く
       this.faceTarget(attacker, target);
     }
   }
 
   /**
-   * Use a skill against the target
-   * @param {Character} user - The skill user
-   * @param {Character} target - The target
-   * @param {object} skill - The skill to use
+   * ターゲットに対してスキルを使用します
+   * @param {Character} user - スキル使用者
+   * @param {Character} target - ターゲット
+   * @param {object} skill - 使用するスキル
    */
   useSkill(user, target, skill) {
-    // Check if the skill is an action
+    // スキルがアクションかどうかをチェック
     if (skill.action) {
-      // Set the target for the action
+      // アクションのターゲットを設定
       skill.action.target = target;
       
-      // Execute the action
+      // アクションを実行
       skill.action.play();
       
-      // Consume mana if required
-      if (skill.manaCost && user.Mana >= skill.manaCost) {
-        user.Mana -= skill.manaCost;
+      // 必要なマナを消費
+      if (skill.manaCost && user.mana >= skill.manaCost) {
+        user.mana -= skill.manaCost;
       }
       
-      // Face the target
+      // ターゲットの方向を向く
       this.faceTarget(user, target);
     }
   }
 
   /**
-   * Check if a skill can be used
-   * @param {Character} character - The character
-   * @param {object} skill - The skill to check
-   * @returns {boolean} True if the skill can be used
+   * スキルが使用可能かどうかをチェックします
+   * @param {Character} character - キャラクター
+   * @param {object} skill - チェックするスキル
+   * @returns {boolean} スキルが使用可能な場合はtrue
    */
   canUseSkill(character, skill) {
-    // Check cooldown
+    // クールダウンをチェック
     if (skill.lastUsedTime && Date.now() - skill.lastUsedTime < skill.cooldown) {
       return false;
     }
     
-    // Check mana cost
-    if (skill.manaCost && character.Mana < skill.manaCost) {
+    // マナコストをチェック
+    if (skill.manaCost && character.mana < skill.manaCost) {
       return false;
     }
     
@@ -160,16 +161,16 @@ class AttackBehavior {
   }
 
   /**
-   * Find a skill in the character's skill tree
-   * @param {object} skillTree - The character's skill tree
-   * @param {string} skillId - The ID of the skill to find
-   * @returns {object|null} The skill object or null if not found
+   * キャラクターのスキルツリーからスキルを検索します
+   * @param {object} skillTree - キャラクターのスキルツリー
+   * @param {string} skillId - 検索するスキルのID
+   * @returns {object|null} スキルオブジェクトまたは見つからない場合はnull
    */
   findSkillInSkillTree(skillTree, skillId) {
     if (!skillTree) return null;
     
-    // Implementation depends on your skill tree structure
-    // This is a simplified example
+    // 実装はスキルツリーの構造に依存します
+    // これは簡略化した例です
     if (skillTree.skills) {
       return skillTree.skills.find(skill => skill.id === skillId);
     }
@@ -178,13 +179,13 @@ class AttackBehavior {
   }
 
   /**
-   * Get the basic attack action for a character
-   * @param {Character} character - The character
-   * @returns {Action|null} The basic attack action or null
+   * キャラクターの基本攻撃アクションを取得します
+   * @param {Character} character - キャラクター
+   * @returns {Action|null} 基本攻撃アクションまたはnull
    */
   getBasicAttackAction(character) {
-    // Implementation depends on your character structure
-    // This is a simplified example
+    // 実装はキャラクター構造に依存します
+    // これは簡略化した例です
     if (character.actions) {
       return character.actions.find(action => action.type === 'basicAttack');
     }
@@ -193,41 +194,29 @@ class AttackBehavior {
   }
 
   /**
-   * Make a character face a target
-   * @param {Character} character - The character
-   * @param {Character} target - The target
+   * キャラクターがターゲットの方向を向くようにします
+   * @param {Character} character - キャラクター
+   * @param {Character} target - ターゲット
    */
   faceTarget(character, target) {
     if (!character || !target) return;
     
-    // Calculate direction to target
-    const dx = target.position.x - character.position.x;
-    const dy = target.position.y - character.position.y;
+    // ターゲットへの方向を計算
+    const dx = target.x - character.x;
+    const dy = target.y - character.y;
     
-    // Set character direction based on angle
+    // 角度に基づいてキャラクターの方向を設定
     const angle = Math.atan2(dy, dx);
     
-    // Implementation depends on your character structure
-    // This is a simplified example
+    // 実装はキャラクター構造に依存します
+    // これは簡略化した例です
     if (character.setDirection) {
       character.setDirection(angle);
     }
   }
 
   /**
-   * Calculate distance between two positions
-   * @param {object} pos1 - First position
-   * @param {object} pos2 - Second position
-   * @returns {number} Distance between positions
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  /**
-   * Reset the behavior's state
+   * 行動の状態をリセットします
    */
   reset() {
     this.state = NodeState.FAILURE;

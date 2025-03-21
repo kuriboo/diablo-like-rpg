@@ -1,44 +1,46 @@
 /**
- * Base class for AI controllers in the game
- * Provides common functionality for all AI-controlled entities
+ * ゲーム内のAIコントローラーの基本クラス
+ * すべてのAI制御エンティティに共通の機能を提供します
  */
+import { getDistance } from '../../utils/mathUtils';
+
 class AIController {
     /**
-     * Create a new AI controller
-     * @param {Character} owner - The character this AI controls
-     * @param {object} options - Configuration options
+     * 新しいAIコントローラーを作成します
+     * @param {Character} owner - このAIが制御するキャラクター
+     * @param {object} options - 設定オプション
      */
     constructor(owner, options = {}) {
       this.owner = owner;
       this.options = {
-        updateInterval: 200, // ms between AI updates
-        perceptionRadius: 300, // default perception radius
+        updateInterval: 200, // AI更新間隔（ミリ秒）
+        perceptionRadius: 300, // デフォルトの知覚半径
         ...options
       };
       
       this.enabled = true;
       this.target = null;
       this.lastUpdateTime = 0;
-      this.blackboard = new Map(); // Shared data for AI components
+      this.blackboard = new Map(); // AI内部データの共有ストレージ
       this.currentBehavior = null;
     }
   
     /**
-     * Update the AI state
-     * @param {number} time - Current game time
-     * @param {number} delta - Time since last update
+     * AIの状態を更新します
+     * @param {number} time - 現在のゲーム時間
+     * @param {number} delta - 前回の更新からの経過時間
      */
     update(time, delta) {
       if (!this.enabled || !this.owner) return;
       
-      // Only update at specified intervals to save performance
+      // パフォーマンスを節約するため、指定された間隔でのみ更新
       if (time - this.lastUpdateTime < this.options.updateInterval) return;
       this.lastUpdateTime = time;
       
-      // Update perception
+      // 知覚の更新
       this.updatePerception();
       
-      // Update behavior
+      // 行動の更新
       if (this.currentBehavior) {
         const result = this.currentBehavior.execute(delta);
         if (result !== 'running') {
@@ -50,22 +52,22 @@ class AIController {
     }
   
     /**
-     * Update the perception system to detect targets and threats
+     * ターゲットや脅威を検出するための知覚システムを更新します
      */
     updatePerception() {
-      // Base implementation - to be overridden by specific AI types
+      // 基本実装 - 特定のAIタイプでオーバーライドされます
     }
   
     /**
-     * Select the next behavior to execute
+     * 次に実行する行動を選択します
      */
     selectNextBehavior() {
-      // Base implementation - to be overridden by specific AI types
+      // 基本実装 - 特定のAIタイプでオーバーライドされます
     }
   
     /**
-     * Set or clear the current target for this AI
-     * @param {Character|null} target - The new target, or null to clear
+     * このAIの現在のターゲットを設定または解除します
+     * @param {Character|null} target - 新しいターゲット、またはnullで解除
      */
     setTarget(target) {
       this.target = target;
@@ -73,51 +75,39 @@ class AIController {
     }
   
     /**
-     * Check if a position is within perception range
-     * @param {object} position - Position to check
-     * @returns {boolean} True if position is within range
+     * 位置が知覚範囲内にあるかどうかを確認します
+     * @param {object} position - 確認する位置
+     * @returns {boolean} 位置が範囲内にある場合はtrue
      */
     isInPerceptionRange(position) {
       if (!this.owner || !position) return false;
       
-      const distance = this.calculateDistance(this.owner.position, position);
+      const distance = getDistance(this.owner.x, this.owner.y, position.x, position.y);
       return distance <= this.options.perceptionRadius;
     }
   
     /**
-     * Calculate distance between two positions
-     * @param {object} pos1 - First position
-     * @param {object} pos2 - Second position
-     * @returns {number} Distance between positions
-     */
-    calculateDistance(pos1, pos2) {
-      const dx = pos2.x - pos1.x;
-      const dy = pos2.y - pos1.y;
-      return Math.sqrt(dx * dx + dy * dy);
-    }
-  
-    /**
-     * Enable or disable the AI controller
-     * @param {boolean} value - Whether to enable or disable
+     * AIコントローラーを有効または無効にします
+     * @param {boolean} value - 有効にするかどうか
      */
     setEnabled(value) {
       this.enabled = value;
     }
   
     /**
-     * Store a value in the AI's blackboard
-     * @param {string} key - The key to store the value under
-     * @param {any} value - The value to store
+     * AIのブラックボードに値を保存します
+     * @param {string} key - 値を保存するキー
+     * @param {any} value - 保存する値
      */
     setBlackboardValue(key, value) {
       this.blackboard.set(key, value);
     }
   
     /**
-     * Retrieve a value from the AI's blackboard
-     * @param {string} key - The key to retrieve
-     * @param {any} defaultValue - Default value if key doesn't exist
-     * @returns {any} The stored value or defaultValue
+     * AIのブラックボードから値を取得します
+     * @param {string} key - 取得するキー
+     * @param {any} defaultValue - キーが存在しない場合のデフォルト値
+     * @returns {any} 保存された値またはデフォルト値
      */
     getBlackboardValue(key, defaultValue = null) {
       return this.blackboard.has(key) ? this.blackboard.get(key) : defaultValue;

@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * IdleBehavior - キャラクターの待機行動を制御
@@ -44,7 +45,7 @@ class IdleBehavior {
     
     // ターゲットがある場合は待機終了
     const target = controller.target;
-    if (target && target.Life > 0) {
+    if (target && target.life > 0) {
       this.stopIdle();
       this.state = NodeState.FAILURE;
       return this.state;
@@ -72,7 +73,7 @@ class IdleBehavior {
       
       // ターゲットに向かって移動
       if (this.movementTarget) {
-        const distance = this.calculateDistance(owner.position, this.movementTarget);
+        const distance = getDistance(owner.x, owner.y, this.movementTarget.x, this.movementTarget.y);
         
         // ターゲットに到達したら新しいターゲットを作成
         if (distance < 5) {
@@ -140,8 +141,8 @@ class IdleBehavior {
     const distance = Math.random() * this.options.movementRadius;
     
     // 新しい位置を計算
-    const x = character.position.x + Math.cos(angle) * distance;
-    const y = character.position.y + Math.sin(angle) * distance;
+    const x = character.x + Math.cos(angle) * distance;
+    const y = character.y + Math.sin(angle) * distance;
     
     // ナビゲーションメッシュに安全ポイントを投影（実装があれば）
     const controller = character.controller;
@@ -190,8 +191,8 @@ class IdleBehavior {
    */
   moveTowards(character, position, delta, speedMultiplier = 1.0) {
     // 方向ベクトルを計算
-    const dx = position.x - character.position.x;
-    const dy = position.y - character.position.y;
+    const dx = position.x - character.x;
+    const dy = position.y - character.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -199,19 +200,19 @@ class IdleBehavior {
     const dirY = dy / length;
     
     // 移動距離を計算
-    const speed = character.MoveSpeed * speedMultiplier;
+    const speed = character.moveSpeed * speedMultiplier;
     const moveDistance = speed * delta / 1000; // 秒単位に変換
     
     // 新しい位置を計算
-    const newX = character.position.x + dirX * moveDistance;
-    const newY = character.position.y + dirY * moveDistance;
+    const newX = character.x + dirX * moveDistance;
+    const newY = character.y + dirY * moveDistance;
     
     // キャラクターの位置を更新
     if (character.move) {
       character.move(newX, newY);
     } else {
-      character.position.x = newX;
-      character.position.y = newY;
+      character.x = newX;
+      character.y = newY;
     }
     
     // 移動方向を向く
@@ -219,18 +220,6 @@ class IdleBehavior {
       const angle = Math.atan2(dy, dx);
       character.setDirection(angle);
     }
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

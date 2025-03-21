@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * FleeingBehavior - キャラクターが特定のターゲットから逃げるための行動
@@ -41,14 +42,14 @@ class FleeingBehavior {
     }
     
     // ターゲットが生きているかチェック
-    if (target.Life <= 0) {
+    if (target.life <= 0) {
       controller.setTarget(null);
       this.state = NodeState.SUCCESS;
       return this.state;
     }
     
     // ターゲットとの距離を計算
-    const distance = this.calculateDistance(owner.position, target.position);
+    const distance = getDistance(owner.x, owner.y, target.x, target.y);
     
     // 安全な距離まで逃げた場合、成功
     if (distance >= this.options.safeDistance) {
@@ -115,8 +116,8 @@ class FleeingBehavior {
     const target = controller.target;
     
     // ターゲットから逃げる方向ベクトルを計算
-    const dx = owner.position.x - target.position.x;
-    const dy = owner.position.y - target.position.y;
+    const dx = owner.x - target.x;
+    const dy = owner.y - target.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -124,8 +125,8 @@ class FleeingBehavior {
     const dirY = dy / length;
     
     // 逃走距離で安全ポイントを計算
-    const safeX = owner.position.x + dirX * this.options.fleeDistance;
-    const safeY = owner.position.y + dirY * this.options.fleeDistance;
+    const safeX = owner.x + dirX * this.options.fleeDistance;
+    const safeY = owner.y + dirY * this.options.fleeDistance;
     
     // ナビゲーションメッシュに安全ポイントを投影（実装があれば）
     const navMesh = controller.getBlackboardValue('navMesh');
@@ -149,8 +150,8 @@ class FleeingBehavior {
    */
   fleeFromTarget(character, target, delta) {
     // 逃走方向を計算
-    const dx = character.position.x - target.position.x;
-    const dy = character.position.y - target.position.y;
+    const dx = character.x - target.x;
+    const dy = character.y - target.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -158,19 +159,19 @@ class FleeingBehavior {
     const dirY = dy / length;
     
     // 移動距離を計算
-    const speed = character.MoveSpeed * this.options.fleeSpeed;
+    const speed = character.moveSpeed * this.options.fleeSpeed;
     const moveDistance = speed * delta / 1000; // 秒単位に変換
     
     // 新しい位置を計算
-    const newX = character.position.x + dirX * moveDistance;
-    const newY = character.position.y + dirY * moveDistance;
+    const newX = character.x + dirX * moveDistance;
+    const newY = character.y + dirY * moveDistance;
     
     // キャラクターの位置を更新
     if (character.move) {
       character.move(newX, newY);
     } else {
-      character.position.x = newX;
-      character.position.y = newY;
+      character.x = newX;
+      character.y = newY;
     }
   }
 
@@ -182,8 +183,8 @@ class FleeingBehavior {
    */
   moveTowards(character, position, delta) {
     // 方向ベクトルを計算
-    const dx = position.x - character.position.x;
-    const dy = position.y - character.position.y;
+    const dx = position.x - character.x;
+    const dy = position.y - character.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -191,19 +192,19 @@ class FleeingBehavior {
     const dirY = dy / length;
     
     // 移動距離を計算
-    const speed = character.MoveSpeed * this.options.fleeSpeed;
+    const speed = character.moveSpeed * this.options.fleeSpeed;
     const moveDistance = speed * delta / 1000; // 秒単位に変換
     
     // 新しい位置を計算
-    const newX = character.position.x + dirX * moveDistance;
-    const newY = character.position.y + dirY * moveDistance;
+    const newX = character.x + dirX * moveDistance;
+    const newY = character.y + dirY * moveDistance;
     
     // キャラクターの位置を更新
     if (character.move) {
       character.move(newX, newY);
     } else {
-      character.position.x = newX;
-      character.position.y = newY;
+      character.x = newX;
+      character.y = newY;
     }
   }
 
@@ -216,8 +217,8 @@ class FleeingBehavior {
     if (!character || !target) return;
     
     // ターゲットへの方向を計算
-    const dx = character.position.x - target.position.x;
-    const dy = character.position.y - target.position.y;
+    const dx = character.x - target.x;
+    const dy = character.y - target.y;
     
     // 角度を基にキャラクターの方向を設定
     const angle = Math.atan2(dy, dx);
@@ -226,18 +227,6 @@ class FleeingBehavior {
     if (character.setDirection) {
       character.setDirection(angle);
     }
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

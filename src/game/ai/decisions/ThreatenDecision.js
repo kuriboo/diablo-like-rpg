@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * ThreatenDecision - 脅威レベルに基づく判断を行う
@@ -89,7 +90,7 @@ class ThreatenDecision {
     let threatLevel = 0;
     
     // 健康状態から脅威レベルを計算（体力が低いほど脅威が高い）
-    const healthRatio = owner.Life / owner.MaxLife;
+    const healthRatio = owner.life / owner.maxLife;
     threatLevel += (1 - healthRatio) * 0.5;
     
     // 受けたダメージから脅威レベルを計算
@@ -102,7 +103,7 @@ class ThreatenDecision {
       }
       
       // ダメージ率（最大体力に対する受けたダメージの割合）
-      const damageRatio = Math.min(this.damageReceived / owner.MaxLife, 1.0);
+      const damageRatio = Math.min(this.damageReceived / owner.maxLife, 1.0);
       threatLevel += damageRatio * 0.3;
     }
     
@@ -116,11 +117,11 @@ class ThreatenDecision {
     // ターゲットの強さから脅威レベルを計算
     if (this.options.considerTargetStrength && target) {
       // レベル差
-      const levelDifference = target.Level - owner.Level;
+      const levelDifference = target.level - owner.level;
       const levelFactor = Math.max(0, levelDifference / 10);
       
       // ターゲットの攻撃力
-      const attackDifference = target.BasicAttack - owner.BasicDefence;
+      const attackDifference = target.basicAttack - owner.basicDefence;
       const attackFactor = Math.max(0, attackDifference / 100);
       
       threatLevel += (levelFactor + attackFactor) * 0.2;
@@ -152,15 +153,15 @@ class ThreatenDecision {
     
     // 敵かどうかを判断する関数
     const isEnemy = (character) => {
-      if (!character || character === owner || character.Life <= 0) {
+      if (!character || character === owner || character.life <= 0) {
         return false;
       }
       
       // 敵の判断（実装に依存）
-      if (owner.ClassType.name === 'Player' || owner.ClassType.name === 'Companion') {
-        return character.ClassType.name === 'Enemy';
-      } else if (owner.ClassType.name === 'Enemy') {
-        return character.ClassType.name === 'Player' || character.ClassType.name === 'Companion';
+      if (owner.classType.name === 'Player' || owner.classType.name === 'Companion') {
+        return character.classType.name === 'Enemy';
+      } else if (owner.classType.name === 'Enemy') {
+        return character.classType.name === 'Player' || character.classType.name === 'Companion';
       }
       
       return false;
@@ -172,7 +173,7 @@ class ThreatenDecision {
         return false;
       }
       
-      const distance = this.calculateDistance(owner.position, character.position);
+      const distance = getDistance(owner.x, owner.y, character.x, character.y);
       return distance <= radius;
     });
   }
@@ -183,18 +184,6 @@ class ThreatenDecision {
    */
   recordDamageReceived(damage) {
     this.damageReceived += damage;
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

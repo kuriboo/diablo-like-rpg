@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * ReturnBehavior - キャラクターが元の位置やホームポイントに戻る行動
@@ -42,7 +43,7 @@ class ReturnBehavior {
     
     // ターゲットがある場合は帰還を中断
     const target = controller.target;
-    if (target && target.Life > 0) {
+    if (target && target.life > 0) {
       this.state = NodeState.FAILURE;
       return this.state;
     }
@@ -58,7 +59,7 @@ class ReturnBehavior {
         
         // 元の位置もない場合は現在の位置を使用
         if (!this.originalPosition) {
-          this.originalPosition = { ...owner.position };
+          this.originalPosition = { x: owner.x, y: owner.y };
           controller.setBlackboardValue('originalPosition', this.originalPosition);
         }
       }
@@ -74,7 +75,7 @@ class ReturnBehavior {
     }
     
     // 帰還先との距離を計算
-    const distance = this.calculateDistance(owner.position, destination);
+    const distance = getDistance(owner.x, owner.y, destination.x, destination.y);
     
     // 帰還先に到達した場合
     if (distance <= this.options.homePointRadius) {
@@ -113,7 +114,8 @@ class ReturnBehavior {
     // コントローラーに経路探索機能がある場合は使用
     const pathfinder = controller.getBlackboardValue('pathfinder');
     if (pathfinder) {
-      this.currentPath = pathfinder.findPath(owner.position, destination);
+      const startPos = { x: owner.x, y: owner.y };
+      this.currentPath = pathfinder.findPath(startPos, destination);
       this.currentPathIndex = 0;
     } else {
       // 経路探索機能がない場合は経路をクリア
@@ -135,7 +137,7 @@ class ReturnBehavior {
     const waypoint = this.currentPath[this.currentPathIndex];
     
     // ウェイポイントまでの距離を計算
-    const distance = this.calculateDistance(character.position, waypoint);
+    const distance = getDistance(character.x, character.y, waypoint.x, waypoint.y);
     
     // ウェイポイントに十分近づいたら次へ
     if (distance <= 5) {
@@ -169,8 +171,8 @@ class ReturnBehavior {
    */
   moveTowards(character, position, delta) {
     // 方向ベクトルを計算
-    const dx = position.x - character.position.x;
-    const dy = position.y - character.position.y;
+    const dx = position.x - character.x;
+    const dy = position.y - character.y;
     
     // 方向を正規化
     const length = Math.sqrt(dx * dx + dy * dy);
@@ -178,19 +180,19 @@ class ReturnBehavior {
     const dirY = dy / length;
     
     // 移動距離を計算
-    const speed = character.MoveSpeed * this.options.returnSpeed;
+    const speed = character.moveSpeed * this.options.returnSpeed;
     const moveDistance = speed * delta / 1000; // 秒単位に変換
     
     // 新しい位置を計算
-    const newX = character.position.x + dirX * moveDistance;
-    const newY = character.position.y + dirY * moveDistance;
+    const newX = character.x + dirX * moveDistance;
+    const newY = character.y + dirY * moveDistance;
     
     // キャラクターの位置を更新
     if (character.move) {
       character.move(newX, newY);
     } else {
-      character.position.x = newX;
-      character.position.y = newY;
+      character.x = newX;
+      character.y = newY;
     }
     
     // 移動方向を向く
@@ -217,18 +219,6 @@ class ReturnBehavior {
     if (!this.homePoint) {
       this.originalPosition = position;
     }
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

@@ -1,42 +1,31 @@
-import AIController from './core/AIController';
-import BehaviorTree, { 
-  SelectorNode, 
-  SequenceNode, 
-  InverterNode, 
-  ConditionNode, 
-  ActionNode,
-  NodeState 
-} from './core/BehaviorTree';
-import Blackboard from './core/Blackboard';
-
-// 行動
-import AttackBehavior from './behaviors/AttackBehavior';
-import ChaseBehavior from './behaviors/ChaseBehavior';
-import FleeingBehavior from './behaviors/FleeingBehavior';
-import IdleBehavior from './behaviors/IdleBehavior';
-import PatrolBehavior from './behaviors/PatrolBehavior';
-import ReturnBehavior from './behaviors/ReturnBehavior';
-import SkillUseBehavior from './behaviors/SkillUseBehavior';
-
-// 判断
-import HealthDecision from './decisions/HealthDecision';
-import DistanceDecision from './decisions/DistanceDecision';
-import TargetDecision from './decisions/TargetDecision';
-import ThreatenDecision from './decisions/ThreatenDecision';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
- * EnemyAI - 敵キャラクターのAIを制御するクラス
+ * ActionSystemを用いた敵AI制御クラス
+ * 従来のAIController依存を排除し、Actionベースで動作します
  */
-class EnemyAI extends AIController {
+export default class EnemyAI {
   /**
-   * 新しい敵AIを作成
-   * @param {Enemy} owner - このAIが制御する敵キャラクター
+   * 新しい敵AI制御を作成
+   * @param {Enemy} enemy - AIが制御する敵キャラクター
    * @param {object} options - 設定オプション
+   * @param {ActionSystem} actionSystem - アクションシステム
    */
-  constructor(owner, options = {}) {
-    super(owner, options);
+  constructor(enemy, options = {}, actionSystem) {
+    // 敵キャラクターの参照
+    this.enemy = enemy;
+
+    // シーン参照
+    this.scene = enemy.scene;
     
-    // デフォルトのAI設定
+    // アクションシステム
+    this.actionSystem = actionSystem || (this.scene ? this.scene.actionSystem : null);
+    
+    if (!this.actionSystem) {
+      console.error('EnemyAI: ActionSystemが提供されていません。正しく動作しない可能性があります。');
+    }
+    
+    // AI設定
     this.options = {
       aggressiveness: 0.7, // 攻撃性（0.0～1.0）
       intelligence: 0.5, // 知性（0.0～1.0）
@@ -47,254 +36,416 @@ class EnemyAI extends AIController {
       returnHomeRange: 600, // ホームに戻る範囲
       patrolRadius: 200, // 巡回半径
       useSkills: true, // スキルを使用するかどうか
-      ...options,
-      ...super.options
+      updateInterval: 1000, // AI更新間隔（ミリ秒）
+      ...options
     };
     
-    // 行動オブジェクト
-    this.attackBehavior = new AttackBehavior({
-      attackRange: this.options.attackRange,
-      attackCooldown: 1000
-    });
+    // 現在のターゲット
+    this.target = null;
     
-    this.chaseBehavior = new ChaseBehavior({
-      maxChaseDistance: this.options.chaseRange,
-      minDistance: this.options.attackRange * 0.8
-    });
+    // 共有データ（旧ブラックボード相当）
+    this.data = new Map();
     
-    this.fleeingBehavior = new FleeingBehavior({
-      fleeDistance: this.options.perceptionRadius
-    });
+    // 元の位置を記録（復帰用）
+    this.originalPosition = { x: enemy.x, y: enemy.y };
+    this.data.set('originalPosition', this.originalPosition);
     
-    this.idleBehavior = new IdleBehavior({
-      randomMovement: true,
-      movementRadius: 50
-    });
+    // 最後の体力
+    this.lastHealth = enemy.life;
     
-    this.patrolBehavior = new PatrolBehavior({
-      generateRandomPoints: true,
-      randomPointRadius: this.options.patrolRadius,
-      randomPointCount: 5
-    });
+    // 最後の更新時間
+    this.lastUpdateTime = 0;
     
-    this.returnBehavior = new ReturnBehavior({
-      returnSpeed: 1.2
-    });
+    // 有効フラグ
+    this.enabled = true;
     
-    this.skillUseBehavior = new SkillUseBehavior({
-      maxRange: this.options.attackRange * 1.5,
-      useAnyAvailableSkill: true
-    });
-    
-    // 判断オブジェクト
-    this.lowHealthDecision = new HealthDecision({
-      condition: 'low',
-      lowHealthThreshold: this.options.fleeHealthThreshold
-    });
-    
-    this.targetLowHealthDecision = new HealthDecision({
-      condition: 'targetLow',
-      targetLowHealthThreshold: 0.3
-    });
-    
-    this.inAttackRangeDecision = new DistanceDecision({
-      maxDistance: this.options.attackRange,
-      compareMode: 'target',
-      condition: 'inRange'
-    });
-    
-    this.inChaseRangeDecision = new DistanceDecision({
-      maxDistance: this.options.chaseRange,
-      compareMode: 'target',
-      condition: 'inRange'
-    });
-    
-    this.tooFarFromHomeDecision = new DistanceDecision({
-      maxDistance: this.options.returnHomeRange,
-      compareMode: 'home',
-      condition: 'tooFar'
-    });
-    
-    this.hasTargetDecision = new TargetDecision({
-      condition: 'hasTarget'
-    });
-    
-    this.selectTargetDecision = new TargetDecision({
-      condition: 'noTarget',
-      selectMode: 'nearest',
-      targetType: 'player',
-      searchRadius: this.options.perceptionRadius
-    });
-    
-    this.highThreatDecision = new ThreatenDecision({
-      condition: 'highThreat',
-      highThreatenThreshold: 0.7
-    });
-    
-    // 行動ツリーを初期化
-    this.initializeBehaviorTree();
-    
-    // 前回の位置を記録（巡回用）
-    this.originalPosition = { ...owner.position };
-    this.blackboard.set('originalPosition', this.originalPosition);
+    // 更新のための間隔タイマーを設定
+    this.setupUpdateTimer();
   }
 
   /**
-   * 行動ツリーを初期化
+   * 定期更新のためのタイマーを設定
    */
-  initializeBehaviorTree() {
-    // 攻撃サブツリー
-    const attackSequence = new SequenceNode([
-      new ConditionNode(() => this.hasTargetDecision.execute(this)),
-      new ConditionNode(() => this.inAttackRangeDecision.execute(this)),
-      new ActionNode((controller, delta) => {
-        // スキルを使用するかどうか
-        if (this.options.useSkills && Math.random() < this.options.intelligence) {
-          return this.skillUseBehavior.execute(controller, delta);
-        }
-        
-        // 通常攻撃
-        return this.attackBehavior.execute(controller, delta);
-      })
-    ]);
+  setupUpdateTimer() {
+    if (!this.scene || !this.scene.time) return;
     
-    // 追跡サブツリー
-    const chaseSequence = new SequenceNode([
-      new ConditionNode(() => this.hasTargetDecision.execute(this)),
-      new ConditionNode(() => this.inChaseRangeDecision.execute(this)),
-      new ActionNode((controller, delta) => {
-        return this.chaseBehavior.execute(controller, delta);
-      })
-    ]);
-    
-    // 逃走サブツリー
-    const fleeSequence = new SequenceNode([
-      new ConditionNode(() => this.lowHealthDecision.execute(this)),
-      new ConditionNode(() => this.hasTargetDecision.execute(this)),
-      new ActionNode((controller, delta) => {
-        return this.fleeingBehavior.execute(controller, delta);
-      })
-    ]);
-    
-    // 帰還サブツリー
-    const returnSequence = new SequenceNode([
-      new ConditionNode(() => this.tooFarFromHomeDecision.execute(this)),
-      new ActionNode((controller, delta) => {
-        return this.returnBehavior.execute(controller, delta);
-      })
-    ]);
-    
-    // 探索サブツリー（ターゲット検索）
-    const searchSequence = new SequenceNode([
-      new InverterNode(
-        new ConditionNode(() => this.hasTargetDecision.execute(this))
-      ),
-      new ConditionNode(() => this.selectTargetDecision.execute(this))
-    ]);
-    
-    // 巡回サブツリー
-    const patrolSequence = new SequenceNode([
-      new InverterNode(
-        new ConditionNode(() => this.hasTargetDecision.execute(this))
-      ),
-      new ActionNode((controller, delta) => {
-        return this.patrolBehavior.execute(controller, delta);
-      })
-    ]);
-    
-    // 待機サブツリー
-    const idleSequence = new ActionNode((controller, delta) => {
-      return this.idleBehavior.execute(controller, delta);
+    // 定期的に意思決定を行うイベントを設定
+    this.updateEvent = this.scene.time.addEvent({
+      delay: this.options.updateInterval,
+      callback: this.update,
+      callbackScope: this,
+      loop: true
     });
-    
-    // ルートセレクター
-    const rootNode = new SelectorNode([
-      fleeSequence,
-      returnSequence,
-      attackSequence,
-      chaseSequence,
-      searchSequence,
-      patrolSequence,
-      idleSequence
-    ]);
-    
-    // 行動ツリーを設定
-    this.behaviorTree = new BehaviorTree(rootNode);
   }
 
   /**
-   * 知覚システムを更新
+   * AIの更新処理
    */
-  updatePerception() {
-    const owner = this.owner;
+  update() {
+    // 無効化されているか、敵が存在しない/死亡している場合は更新しない
+    if (!this.enabled || !this.enemy || this.enemy.isDead) return;
     
-    // ターゲットがないまたはターゲットが死んでいる場合
-    if (!this.target || this.target.Life <= 0) {
-      this.setTarget(null);
-      
-      // 新しいターゲットを探す
-      this.selectTargetDecision.execute(this);
-    }
-    
-    // ダメージの記録
-    const lastHealth = this.blackboard.get('lastHealth', owner.Life);
-    if (lastHealth > owner.Life) {
-      const damage = lastHealth - owner.Life;
-      this.highThreatDecision.recordDamageReceived(damage);
-    }
-    this.blackboard.set('lastHealth', owner.Life);
-  }
-
-  /**
-   * AIの状態を更新
-   * @param {number} time - 現在のゲーム時間
-   * @param {number} delta - 前回の更新からの経過時間
-   */
-  update(time, delta) {
-    if (!this.enabled || !this.owner) return;
-    
-    // 一定間隔でのみ更新（パフォーマンス向上のため）
-    if (time - this.lastUpdateTime < this.options.updateInterval) return;
-    this.lastUpdateTime = time;
-    
-    // 知覚システムを更新
+    // 知覚システムの更新
     this.updatePerception();
     
-    // 行動ツリーを実行
-    if (this.behaviorTree) {
-      this.behaviorTree.execute(this, delta);
+    // 行動決定と実行
+    this.decideAndAct();
+  }
+
+  /**
+   * 知覚システムの更新
+   */
+  updatePerception() {
+    // ダメージの検知
+    if (this.enemy.life < this.lastHealth) {
+      const damage = this.lastHealth - this.enemy.life;
+      this.onDamageReceived(damage);
+    }
+    this.lastHealth = this.enemy.life;
+    
+    // ターゲットの検知
+    this.updateTarget();
+  }
+
+  /**
+   * ターゲットの更新
+   */
+  updateTarget() {
+    // 現在のターゲットが無効（死亡など）ならリセット
+    if (this.target && (this.target.isDead || this.target.life <= 0)) {
+      this.target = null;
+    }
+    
+    // ターゲットがなければ新しいターゲットを探す
+    if (!this.target) {
+      this.target = this.findNewTarget();
     }
   }
 
   /**
-   * AI設定を変更
-   * @param {object} newOptions - 新しい設定
+   * 新しいターゲットを探す
+   * @returns {Character|null} 見つかったターゲットまたはnull
    */
-  updateOptions(newOptions) {
-    this.options = { ...this.options, ...newOptions };
+  findNewTarget() {
+    // プレイヤーを最優先
+    const player = this.scene?.player;
+    if (player && !player.isDead && this.isInPerceptionRange(player)) {
+      return player;
+    }
     
-    // 変更された設定に基づいて行動を更新
-    this.attackBehavior.options.attackRange = this.options.attackRange;
-    this.chaseBehavior.options.maxChaseDistance = this.options.chaseRange;
-    this.lowHealthDecision.options.lowHealthThreshold = this.options.fleeHealthThreshold;
+    // コンパニオンも対象
+    const companions = this.scene?.companions || [];
+    for (const companion of companions) {
+      if (!companion.isDead && this.isInPerceptionRange(companion)) {
+        return companion;
+      }
+    }
     
-    // その他の設定更新...
+    return null;
   }
 
   /**
-   * ダメージを受けた時のハンドラー
+   * 対象が知覚範囲内にいるか確認
+   * @param {Character} target - 確認する対象
+   * @returns {boolean} 範囲内にいればtrue
+   */
+  isInPerceptionRange(target) {
+    const distance = getDistance(this.enemy.x, this.enemy.y, target.x, target.y);
+    return distance <= this.options.perceptionRadius;
+  }
+
+  /**
+   * 敵の行動を決定して実行
+   */
+  decideAndAct() {
+    // すでに行動中なら何もしない
+    if (this.isPerformingAction()) return;
+    
+    // 体力率に基づく状況判断
+    const healthRatio = this.enemy.life / this.enemy.maxLife;
+    
+    // 体力が閾値以下なら逃走
+    if (healthRatio <= this.options.fleeHealthThreshold) {
+      this.performFleeAction();
+      return;
+    }
+    
+    // 元の位置から遠すぎる場合は帰還
+    if (this.isTooFarFromHome()) {
+      this.performReturnAction();
+      return;
+    }
+    
+    // ターゲットがいる場合の行動
+    if (this.target) {
+      const distanceToTarget = getDistance(
+        this.enemy.x, this.enemy.y,
+        this.target.x, this.target.y
+      );
+      
+      // 攻撃範囲内ならば攻撃
+      if (distanceToTarget <= this.options.attackRange) {
+        this.performAttackAction();
+      }
+      // 追跡範囲内ならば追跡
+      else if (distanceToTarget <= this.options.chaseRange) {
+        this.performChaseAction();
+      }
+      // 範囲外ならターゲット解除
+      else {
+        this.target = null;
+        this.performIdleOrPatrolAction();
+      }
+    }
+    // ターゲットがいない場合は待機または巡回
+    else {
+      this.performIdleOrPatrolAction();
+    }
+  }
+
+  /**
+   * 現在行動中かどうか
+   * @returns {boolean} 行動中ならtrue
+   */
+  isPerformingAction() {
+    if (!this.actionSystem) return false;
+    
+    // ActionSystemに問い合わせ
+    return this.actionSystem.isEntityActing(this.enemy);
+  }
+
+  /**
+   * ホームから遠すぎるかどうか
+   * @returns {boolean} 遠すぎる場合はtrue
+   */
+  isTooFarFromHome() {
+    const distance = getDistance(
+      this.enemy.x, this.enemy.y,
+      this.originalPosition.x, this.originalPosition.y
+    );
+    
+    return distance > this.options.returnHomeRange;
+  }
+
+  /**
+   * 攻撃行動の実行
+   */
+  performAttackAction() {
+    if (!this.actionSystem || !this.target) return;
+    
+    // スキルを使用するかどうか
+    if (this.options.useSkills && Math.random() < this.options.intelligence) {
+      // スキル使用を試みる
+      const skillUsed = this.tryUseSkill();
+      if (skillUsed) return;
+    }
+    
+    // 通常攻撃アクションを作成
+    const attackAction = this.actionSystem.createAction('attack', {
+      owner: this.enemy,
+      target: this.target,
+      attackRange: this.options.attackRange
+    });
+    
+    this.actionSystem.queueAction(attackAction, true);
+  }
+
+  /**
+   * スキル使用を試みる
+   * @returns {boolean} スキルを使用できた場合はtrue
+   */
+  tryUseSkill() {
+    if (!this.actionSystem || !this.target || !this.enemy.specialActions) return false;
+    
+    // 使用可能なスキルを探す
+    const availableSkills = Array.from(this.enemy.specialActions.entries());
+    if (availableSkills.length === 0) return false;
+    
+    // ランダムにスキルを選択
+    const randomIndex = Math.floor(Math.random() * availableSkills.length);
+    const [skillId, skillData] = availableSkills[randomIndex];
+    
+    // スキルアクションを作成
+    const skillAction = this.actionSystem.createAction('skill', {
+      owner: this.enemy,
+      target: this.target,
+      skillId: skillId,
+      ...skillData
+    });
+    
+    // キューに追加
+    return this.actionSystem.queueAction(skillAction, true);
+  }
+
+  /**
+   * 追跡行動の実行
+   */
+  performChaseAction() {
+    if (!this.actionSystem || !this.target) return;
+    
+    // 追跡アクションを作成
+    const chaseAction = this.actionSystem.createAction('chase', {
+      owner: this.enemy,
+      target: this.target,
+      maxChaseDistance: this.options.chaseRange,
+      minDistance: this.options.attackRange * 0.8,
+      chaseSpeed: 1.5,
+      topDownMap: this.scene.topDownMap
+    });
+    
+    this.actionSystem.queueAction(chaseAction, true);
+  }
+
+  /**
+   * 逃走行動の実行
+   */
+  performFleeAction() {
+    if (!this.actionSystem) return;
+    
+    // 逃走先はターゲットの反対方向（いなければホーム方向）
+    const fleeTarget = this.target || this.scene?.player;
+    
+    // 逃走アクションを作成
+    const fleeAction = this.actionSystem.createAction('flee', {
+      owner: this.enemy,
+      target: fleeTarget,
+      fleeDistance: this.options.perceptionRadius,
+      fleeSpeed: 1.7
+    });
+    
+    this.actionSystem.queueAction(fleeAction, true);
+  }
+
+  /**
+   * 帰還行動の実行
+   */
+  performReturnAction() {
+    if (!this.actionSystem) return;
+    
+    // 帰還アクションを作成
+    const returnAction = this.actionSystem.createAction('return', {
+      owner: this.enemy,
+      homePoint: this.originalPosition,
+      returnSpeed: 1.2,
+      topDownMap: this.scene.topDownMap
+    });
+    
+    this.actionSystem.queueAction(returnAction, true);
+  }
+
+  /**
+   * 待機または巡回行動の実行
+   */
+  performIdleOrPatrolAction() {
+    if (!this.actionSystem) return;
+    
+    // 攻撃性に基づいて巡回か待機かを決定
+    if (Math.random() < this.options.aggressiveness) {
+      // 巡回アクションを作成
+      const patrolAction = this.actionSystem.createAction('patrol', {
+        owner: this.enemy,
+        patrolRadius: this.options.patrolRadius,
+        generateRandomPoints: true,
+        randomPointCount: 3,
+        waitTimeAtPoints: 1500,
+        topDownMap: this.scene.topDownMap
+      });
+      
+      this.actionSystem.queueAction(patrolAction, true);
+    } else {
+      // 待機アクションを作成
+      const idleAction = this.actionSystem.createAction('idle', {
+        owner: this.enemy,
+        randomMovement: true,
+        movementRadius: 50,
+        duration: 3000 + Math.random() * 4000
+      });
+      
+      this.actionSystem.queueAction(idleAction, true);
+    }
+  }
+
+  /**
+   * ダメージを受けた時の処理
    * @param {number} damage - 受けたダメージ量
-   * @param {Character} attacker - 攻撃者
+   * @param {Character} attacker - 攻撃者（存在する場合）
    */
-  onDamageReceived(damage, attacker) {
-    // 攻撃者を新しいターゲットとして設定
-    if (attacker && attacker !== this.target && attacker.Life > 0) {
-      this.setTarget(attacker);
+  onDamageReceived(damage, attacker = null) {
+    // 攻撃者をターゲットに設定
+    if (attacker && attacker.life > 0 && !attacker.isDead) {
+      this.target = attacker;
+      
+      // 攻撃者に対して適切な行動を選択
+      this.cancelCurrentAction();
+      this.decideAndAct();
     }
     
-    // 脅威レベルに反映
-    this.highThreatDecision.recordDamageReceived(damage);
+    // ダメージが大きい場合は逃走を検討
+    const damageRatio = damage / this.enemy.maxLife;
+    if (damageRatio > 0.15 && this.enemy.life / this.enemy.maxLife < 0.4) {
+      this.cancelCurrentAction();
+      this.performFleeAction();
+    }
+  }
+
+  /**
+   * 現在の行動をキャンセル
+   */
+  cancelCurrentAction() {
+    if (this.actionSystem) {
+      this.actionSystem.cancelEntityActions(this.enemy);
+    }
+  }
+
+  /**
+   * AIの有効/無効を切り替え
+   * @param {boolean} enabled - 有効にするかどうか
+   */
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    
+    // 無効化時は現在の行動をキャンセル
+    if (!enabled) {
+      this.cancelCurrentAction();
+    }
+  }
+
+  /**
+   * 値を設定
+   * @param {string} key - キー
+   * @param {any} value - 値
+   */
+  setData(key, value) {
+    this.data.set(key, value);
+  }
+
+  /**
+   * 値を取得
+   * @param {string} key - キー
+   * @param {any} defaultValue - デフォルト値
+   * @returns {any} 保存された値またはデフォルト値
+   */
+  getData(key, defaultValue = null) {
+    return this.data.has(key) ? this.data.get(key) : defaultValue;
+  }
+
+  /**
+   * リソースの解放
+   */
+  destroy() {
+    // 更新タイマーを削除
+    if (this.updateEvent && this.updateEvent.remove) {
+      this.updateEvent.remove();
+    }
+    
+    // 実行中のアクションをキャンセル
+    this.cancelCurrentAction();
+    
+    // 参照をクリア
+    this.enemy = null;
+    this.scene = null;
+    this.actionSystem = null;
+    this.target = null;
+    this.data.clear();
   }
 }
-
-export default EnemyAI;

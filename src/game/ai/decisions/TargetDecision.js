@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * TargetDecision - ターゲット選択に関する判断を行う
@@ -53,12 +54,12 @@ class TargetDecision {
         
       case 'targetIsDead':
         // ターゲットが死んでいるかどうか
-        result = currentTarget !== null && currentTarget.Life <= 0;
+        result = currentTarget !== null && currentTarget.life <= 0;
         break;
         
       case 'targetIsAlive':
         // ターゲットが生きているかどうか
-        result = currentTarget !== null && currentTarget.Life > 0;
+        result = currentTarget !== null && currentTarget.life > 0;
         break;
         
       default:
@@ -145,11 +146,11 @@ class TargetDecision {
     
     // 半径内のキャラクターをフィルタリング
     return allCharacters.filter(character => {
-      if (!character || character === owner || character.Life <= 0) {
+      if (!character || character === owner || character.life <= 0) {
         return false;
       }
       
-      const distance = this.calculateDistance(owner.position, character.position);
+      const distance = getDistance(owner.x, owner.y, character.x, character.y);
       return distance <= radius;
     });
   }
@@ -168,19 +169,19 @@ class TargetDecision {
           
         case 'enemy':
           // 敵をフィルタリング（実装に依存）
-          return character.ClassType && 
-                (character.ClassType.name === 'Enemy' || 
-                 (character.ClassType.name === 'Player' && owner.ClassType.name === 'Enemy'));
+          return character.classType && 
+                (character.classType.name === 'Enemy' || 
+                 (character.classType.name === 'Player' && owner.classType.name === 'Enemy'));
           
         case 'ally':
           // 味方をフィルタリング（実装に依存）
-          return character.ClassType && 
-                ((character.ClassType.name === 'Player' || character.ClassType.name === 'Companion') && 
-                 (owner.ClassType.name === 'Player' || owner.ClassType.name === 'Companion'));
+          return character.classType && 
+                ((character.classType.name === 'Player' || character.classType.name === 'Companion') && 
+                 (owner.classType.name === 'Player' || owner.classType.name === 'Companion'));
           
         case 'player':
           // プレイヤーをフィルタリング
-          return character.ClassType && character.ClassType.name === 'Player';
+          return character.classType && character.classType.name === 'Player';
           
         default:
           return false;
@@ -198,10 +199,10 @@ class TargetDecision {
     if (targets.length === 0) return null;
     
     let nearestTarget = targets[0];
-    let shortestDistance = this.calculateDistance(owner.position, targets[0].position);
+    let shortestDistance = getDistance(owner.x, owner.y, targets[0].x, targets[0].y);
     
     for (let i = 1; i < targets.length; i++) {
-      const distance = this.calculateDistance(owner.position, targets[i].position);
+      const distance = getDistance(owner.x, owner.y, targets[i].x, targets[i].y);
       if (distance < shortestDistance) {
         shortestDistance = distance;
         nearestTarget = targets[i];
@@ -220,11 +221,11 @@ class TargetDecision {
     if (targets.length === 0) return null;
     
     let weakestTarget = targets[0];
-    let lowestHealth = targets[0].Life;
+    let lowestHealth = targets[0].life;
     
     for (let i = 1; i < targets.length; i++) {
-      if (targets[i].Life < lowestHealth) {
-        lowestHealth = targets[i].Life;
+      if (targets[i].life < lowestHealth) {
+        lowestHealth = targets[i].life;
         weakestTarget = targets[i];
       }
     }
@@ -241,11 +242,11 @@ class TargetDecision {
     if (targets.length === 0) return null;
     
     let strongestTarget = targets[0];
-    let highestHealth = targets[0].Life;
+    let highestHealth = targets[0].life;
     
     for (let i = 1; i < targets.length; i++) {
-      if (targets[i].Life > highestHealth) {
-        highestHealth = targets[i].Life;
+      if (targets[i].life > highestHealth) {
+        highestHealth = targets[i].life;
         strongestTarget = targets[i];
       }
     }
@@ -263,18 +264,6 @@ class TargetDecision {
     
     const randomIndex = Math.floor(Math.random() * targets.length);
     return targets[randomIndex];
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

@@ -1,987 +1,1239 @@
 import Action from './Action';
 import { ActionType } from '../../constants/actionTypes';
-import Effect from '../objects/Effect';
 import { getDistance } from '../../utils/mathUtils';
 
+/**
+ * 基本的なアクションクラス
+ * キャラクターの移動、攻撃、待機などの基本的な行動を扱います
+ */
 export default class BasicAction extends Action {
-  constructor(config = {}) {
-    super(config);
+  /**
+   * 基本アクションを作成
+   * @param {string} type - アクションタイプ
+   * @param {object} config - 設定オブジェクト
+   */
+  constructor(type, config = {}) {
+    // Action親クラスのコンストラクタを呼び出し
+    super({
+      ...config,
+      type: type || ActionType.BASIC
+    });
     
-    // 基本アクション特有のプロパティ
-    this.animationKey = config.animationKey || null;
-    this.soundKey = config.soundKey || null;
-    this.effectKey = config.effectKey || null;
+    // アクション特有のプロパティ
+    this.actionType = type; // 'move', 'attack', 'idle', 'patrol', 'flee', 'return', 'chase'
     
-    // アクションの成功フラグ
-    this.success = false;
+    // パス関連のプロパティ
+    this.path = config.path || [];
+    this.pathIndex = 0;
+    this.topDownMap = config.topDownMap || (this.scene ? this.scene.topDownMap : null);
     
-    // アクションのコスト
-    this.manaCost = config.manaCost || 0;
-    this.staminaCost = config.staminaCost || 0;
+    // 移動関連のプロパティ
+    this.moveSpeed = config.moveSpeed || (this.owner ? this.owner.moveSpeed : 1);
+    this.maxDistance = config.maxDistance || 0;
+    this.minDistance = config.minDistance || 0;
     
-    // アクションの効果値（ダメージや回復量など）
-    this.value = config.value || 0;
+    // パトロール関連のプロパティ
+    this.patrolPoints = config.patrolPoints || [];
+    this.patrolIndex = 0;
+    this.waitTimeAtPoints = config.waitTimeAtPoints || 0;
+    this.isWaiting = false;
+    this.waitUntilTime = 0;
     
-    // アクションの属性
-    this.element = config.element || 'physical'; // physical, fire, ice, lightning, poison
+    // 攻撃関連のプロパティ
+    this.attackRange = config.attackRange || (this.owner ? this.owner.attackRange : 50);
+    this.attackCooldown = config.attackCooldown || 0;
+    this.lastAttackTime = 0;
+    this.damage = config.damage || 0;
+    this.damageType = config.damageType || 'physical';
     
-    // アクションの射程
-    this.range = config.range || 1;
-    
-    // アクションの影響範囲
-    this.areaOfEffect = config.areaOfEffect || false;
-    this.areaRadius = config.areaRadius || 0;
-    
-    // アクションの移動関連パラメータ
-    this.moveDistance = config.moveDistance || 0;
-    this.moveSpeed = config.moveSpeed || 0;
+    // アクション特有の設定
+    this.setupAction();
   }
-  
-  // アクション実行時の処理をオーバーライド
-  execute() {
-    // アクションの成功フラグ初期化
-    this.success = false;
+
+  /**
+   * アクションタイプに応じた初期設定
+   */
+  setupAction() {
+    switch (this.actionType) {
+      case 'move':
+        this.setupMoveAction();
+        break;
+        
+      case 'attack':
+        this.setupAttackAction();
+        break;
+        
+      case 'idle':
+        this.setupIdleAction();
+        break;
+        
+      case 'patrol':
+        this.setupPatrolAction();
+        break;
+        
+      case 'flee':
+        this.setupFleeAction();
+        break;
+        
+      case 'return':
+        this.setupReturnAction();
+        break;
+        
+      case 'chase':
+        this.setupChaseAction();
+        break;
+    }
+  }
+
+  /**
+   * 移動アクションの設定
+   */
+  setupMoveAction() {
+    // 移動アクション特有の初期化
+    this.duration = this.path.length * 300; // パスの長さに応じたデフォルト時間
+  }
+
+  /**
+   * 攻撃アクションの設定
+   */
+  setupAttackAction() {
+    // 攻撃アクション特有の初期化
+    this.duration = this.attackCooldown || 800; // 攻撃モーションの時間
     
-    // オーナーがいない場合は失敗
-    if (!this.owner) return;
+    // 当たり判定時間
+    this.hitTime = this.duration * 0.6; // 攻撃動作の60%時点で当たり判定
     
-    // マナコストを支払う
-    if (this.manaCost > 0) {
-      if (this.owner.mana < this.manaCost) return; // マナ不足
-      this.owner.mana -= this.manaCost;
+    // ダメージ計算
+    if (this.owner && !this.damage) {
+      this.damage = this.owner.basicAttack || 10;
+    }
+    
+    // 攻撃範囲を設定
+    if (this.owner && !this.attackRange) {
+      this.attackRange = this.owner.attackRange || 50;
+    }
+    
+    // 条件追加: 範囲内にいるか
+    if (this.target) {
+      this.conditions.push({
+        type: 'range',
+        value: this.attackRange / 32 // タイル単位に変換
+      });
+    }
+  }
+
+  /**
+   * 待機アクションの設定
+   */
+  setupIdleAction() {
+    // 待機アクション特有の初期化
+    this.duration = 2000; // デフォルトの待機時間
+    this.randomMovement = this.randomMovement !== undefined ? this.randomMovement : false;
+    this.movementRadius = this.movementRadius || 50;
+    this.movementTarget = null;
+  }
+
+  /**
+   * 巡回アクションの設定
+   */
+  setupPatrolAction() {
+    // 巡回アクション特有の初期化
+    this.duration = 30000; // 巡回の最大時間
+    
+    // パトロールポイントがなく、生成フラグがある場合
+    if (this.patrolPoints.length === 0 && this.owner && this.topDownMap) {
+      this.generateRandomPatrolPoints();
+    }
+  }
+
+  /**
+   * 逃走アクションの設定
+   */
+  setupFleeAction() {
+    // 逃走アクション特有の初期化
+    this.duration = 5000; // 逃走の最大時間
+    this.fleeDistance = this.fleeDistance || 300;
+    this.safeDistance = this.safeDistance || 400;
+    this.fleeSpeed = this.fleeSpeed || 1.7;
+    this.safePoint = null;
+  }
+
+  /**
+   * 帰還アクションの設定
+   */
+  setupReturnAction() {
+    // 帰還アクション特有の初期化
+    this.duration = 10000; // 帰還の最大時間
+    this.homePoint = this.homePoint || null;
+    this.returnSpeed = this.returnSpeed || 1.2;
+    
+    // ホームポイントの取得（ない場合）
+    if (!this.homePoint && this.owner && this.scene) {
+      this.homePoint = this.scene.getBlackboardValue
+        ? this.scene.getBlackboardValue('homePoint')
+        : null;
       
-      // プレイヤーの場合はUIを更新
-      if (this.owner === this.scene.player) {
-        const uiScene = this.scene.scene.get('UIScene');
-        if (uiScene && uiScene.updateManaBar) {
-          uiScene.updateManaBar();
-        }
+      // それでもない場合はオリジナル位置を使用
+      if (!this.homePoint) {
+        this.homePoint = this.scene.getBlackboardValue
+          ? this.scene.getBlackboardValue('originalPosition')
+          : null;
       }
     }
-    
-    // スタミナコストを支払う
-    if (this.staminaCost > 0 && this.owner.stamina !== undefined) {
-      if (this.owner.stamina < this.staminaCost) return; // スタミナ不足
-      this.owner.stamina -= this.staminaCost;
-    }
-    
-    // アクションのタイプに応じた処理
-    switch (this.type) {
-      case ActionType.MOVE:
+  }
+
+  /**
+   * 追跡アクションの設定
+   */
+  setupChaseAction() {
+    // 追跡アクション特有の初期化
+    this.duration = 10000; // 追跡の最大時間
+    this.maxChaseDistance = this.maxChaseDistance || 400;
+    this.minDistance = this.minDistance || 30;
+    this.chaseSpeed = this.chaseSpeed || 1.5;
+    this.updatePathInterval = this.updatePathInterval || 500;
+    this.lastPathUpdateTime = 0;
+  }
+
+  /**
+   * アクション固有の実行処理
+   */
+  execute() {
+    switch (this.actionType) {
+      case 'move':
         this.executeMove();
         break;
-      case ActionType.ATTACK:
+        
+      case 'attack':
         this.executeAttack();
         break;
-      case ActionType.CAST:
-        this.executeCast();
+        
+      case 'idle':
+        this.executeIdle();
         break;
-      case ActionType.HEAL:
-        this.executeHeal();
+        
+      case 'patrol':
+        this.executePatrol();
         break;
-      case ActionType.USE_ITEM:
-        this.executeUseItem();
+        
+      case 'flee':
+        this.executeFlee();
         break;
-      case ActionType.INTERACT:
-        this.executeInteract();
+        
+      case 'return':
+        this.executeReturn();
         break;
+        
+      case 'chase':
+        this.executeChase();
+        break;
+        
       default:
-        // デフォルトの処理
-        console.log(`Executing basic action: ${this.name}`);
-        this.success = true;
-        break;
+        super.execute();
     }
   }
-  
-  // 移動アクションの実行
+
+  /**
+   * 移動アクションの実行
+   */
   executeMove() {
-    if (!this.owner || !this.position) return;
-    
-    // 移動不可状態のチェック
-    if (this.owner.isStunned || this.owner.isRooted) {
+    if (!this.owner || !this.path || this.path.length === 0) {
+      this.complete();
       return;
     }
     
-    // 移動アニメーション
-    this.owner.animationState = 'walk';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
+    // 移動アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('walk');
+    } else if (this.owner.animationState) {
+      this.owner.animationState = 'walk';
+      if (this.owner.playAnimation) {
+        this.owner.playAnimation();
+      }
     }
     
-    // 移動先が歩行可能かチェック - TopDownMap対応
-    let isWalkable = false;
-    
-    // TopDownMapを使用する場合
-    if (this.scene.topDownMap) {
-      const tilePos = this.scene.topDownMap.worldToTileXY(this.position.x, this.position.y);
-      isWalkable = this.scene.topDownMap.isWalkableAt(tilePos.x, tilePos.y);
-    } 
-    // 従来のisWalkableAt関数がある場合
-    else if (this.scene.isWalkableAt) {
-      isWalkable = this.scene.isWalkableAt(this.position.x, this.position.y);
-    }
-    // どちらもない場合は移動可能と見なす
-    else {
-      isWalkable = true;
+    // 継続的な更新は update() で行われる
+  }
+
+  /**
+   * 攻撃アクションの実行
+   */
+  executeAttack() {
+    if (!this.owner) {
+      this.complete();
+      return;
     }
     
-    if (!isWalkable) {
-      // 移動失敗
+    // ターゲットの方向を向く
+    if (this.target) {
+      this.faceTarget();
+    }
+    
+    // 攻撃アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('attack');
+    } else if (this.owner.animationState) {
+      this.owner.animationState = 'attack';
+      if (this.owner.playAnimation) {
+        this.owner.playAnimation();
+      }
+    }
+    
+    // 攻撃時間の記録
+    this.lastAttackTime = Date.now();
+    
+    // 効果音再生
+    if (this.scene && this.scene.sound) {
+      const soundKey = this.owner.attackSound || 'slash_sound';
+      this.scene.sound.play(soundKey);
+    }
+    
+    // 攻撃エフェクト
+    this.showAttackEffect();
+    
+    // 当たり判定は updateAction で行われる
+  }
+
+  /**
+   * 待機アクションの実行
+   */
+  executeIdle() {
+    if (!this.owner) {
+      this.complete();
+      return;
+    }
+    
+    // 待機アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('idle');
+    } else if (this.owner.animationState) {
       this.owner.animationState = 'idle';
       if (this.owner.playAnimation) {
         this.owner.playAnimation();
       }
-      return;
     }
     
-    // 移動速度の計算 - トップダウン向けに調整
-    const moveSpeed = this.owner.getMoveSpeed ? 
-                     this.owner.getMoveSpeed() : (this.moveSpeed || 150);
-    
-    // 移動方向を向く
-    this.facePosition();
-    
-    // 2点間の距離を計算
-    const distance = getDistance(
-      this.owner.x, this.owner.y,
-      this.position.x, this.position.y
-    );
-    
-    // Tweenで移動
-    this.scene.tweens.add({
-      targets: this.owner,
-      x: this.position.x,
-      y: this.position.y,
-      duration: this.duration || (distance / moveSpeed * 1000),
-      ease: 'Linear',
-      onComplete: () => {
-        // 移動完了
-        this.owner.animationState = 'idle';
-        if (this.owner.playAnimation) {
-          this.owner.playAnimation();
-        }
-        this.success = true;
-        
-        // アクション完了
-        this.complete();
-      }
-    });
-    
-    // 移動音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
+    // ランダム移動が有効な場合は移動ターゲットを生成
+    if (this.randomMovement) {
+      this.createMovementTarget();
     }
   }
 
-  // トップダウン向けの方向更新メソッドを追加
-  updateDirectionForTopDown() {
-    if (!this.moveTarget && !this.position) return;
+  /**
+   * 巡回アクションの実行
+   */
+  executePatrol() {
+    if (!this.owner || this.patrolPoints.length === 0) {
+      this.complete();
+      return;
+    }
     
-    const targetX = this.position ? this.position.x : this.moveTarget.x;
-    const targetY = this.position ? this.position.y : this.moveTarget.y;
+    // 最初のパトロールポイントへ移動開始
+    this.moveToPatrolPoint();
+  }
+
+  /**
+   * 逃走アクションの実行
+   */
+  executeFlee() {
+    if (!this.owner || !this.target) {
+      this.complete();
+      return;
+    }
     
-    const dx = targetX - this.owner.x;
-    const dy = targetY - this.owner.y;
+    // 逃走アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('run');
+    } else if (this.owner.animationState) {
+      this.owner.animationState = 'run';
+      if (this.owner.playAnimation) {
+        this.owner.playAnimation();
+      }
+    }
     
-    // トップダウン向けの4方向または8方向
-    if (Math.abs(dx) > Math.abs(dy)) {
-      this.owner.direction = dx > 0 ? 'right' : 'left';
-    } else {
-      this.owner.direction = dy > 0 ? 'down' : 'up';
+    // 安全ポイントを探す
+    this.findSafePoint();
+  }
+
+  /**
+   * 帰還アクションの実行
+   */
+  executeReturn() {
+    if (!this.owner || !this.homePoint) {
+      this.complete();
+      return;
+    }
+    
+    // 帰還アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('walk');
+    } else if (this.owner.animationState) {
+      this.owner.animationState = 'walk';
+      if (this.owner.playAnimation) {
+        this.owner.playAnimation();
+      }
+    }
+    
+    // パスがあれば経路探索を行う
+    if (this.topDownMap && this.topDownMap.findPath) {
+      this.updateReturnPath();
     }
   }
-  
-  // 攻撃アクションの実行
-  executeAttack() {
-    if (!this.owner) return;
+
+  /**
+   * 追跡アクションの実行
+   */
+  executeChase() {
+    if (!this.owner || !this.target) {
+      this.complete();
+      return;
+    }
     
-    // 攻撃対象の設定
-    if (!this.target) {
-      // 対象が設定されていない場合、近くの敵を自動選択
-      this.target = this.findNearestEnemy();
+    // 追跡アニメーション開始
+    if (this.owner.setAnimation) {
+      this.owner.setAnimation('run');
+    } else if (this.owner.animationState) {
+      this.owner.animationState = 'run';
+      if (this.owner.playAnimation) {
+        this.owner.playAnimation();
+      }
+    }
+    
+    // パスがあれば経路探索を行う
+    if (this.topDownMap && this.topDownMap.findPath) {
+      this.updateChasePath();
+    }
+  }
+
+  /**
+   * アクション固有の更新処理
+   * @param {number} time - 現在時間
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateAction(time, delta) {
+    switch (this.actionType) {
+      case 'move':
+        this.updateMove(delta);
+        break;
+        
+      case 'attack':
+        this.updateAttack(time);
+        break;
+        
+      case 'idle':
+        this.updateIdle(delta);
+        break;
+        
+      case 'patrol':
+        this.updatePatrol(time, delta);
+        break;
+        
+      case 'flee':
+        this.updateFlee(delta);
+        break;
+        
+      case 'return':
+        this.updateReturn(time, delta);
+        break;
+        
+      case 'chase':
+        this.updateChase(time, delta);
+        break;
+    }
+  }
+
+  /**
+   * 移動アクションの更新
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateMove(delta) {
+    if (!this.owner || !this.path || this.pathIndex >= this.path.length) {
+      this.complete();
+      return;
+    }
+    
+    // 現在のウェイポイント
+    const currentPoint = this.path[this.pathIndex];
+    
+    // ウェイポイントとの距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      currentPoint.x, currentPoint.y
+    );
+    
+    // ウェイポイントに到達した場合
+    if (distance < 5) {
+      this.pathIndex++;
       
-      if (!this.target) {
-        // 対象がいない場合は失敗
+      // 全ウェイポイントを移動し終えた場合
+      if (this.pathIndex >= this.path.length) {
+        this.complete();
         return;
       }
     }
     
-    // 攻撃範囲のチェック
+    // 次のウェイポイントへ移動
+    this.moveTowards(currentPoint, delta);
+  }
+
+  /**
+   * 攻撃アクションの更新
+   * @param {number} time - 現在時間
+   */
+  updateAttack(time) {
+    // 攻撃開始から一定時間後に当たり判定
+    const elapsed = time - this.startTime;
+    
+    if (elapsed >= this.hitTime && !this.hitProcessed) {
+      this.processAttackHit();
+      this.hitProcessed = true;
+    }
+  }
+
+  /**
+   * 待機アクションの更新
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateIdle(delta) {
+    // ランダム移動が有効な場合
+    if (this.randomMovement && this.movementTarget) {
+      // 移動目標への距離計算
+      const distance = getDistance(
+        this.owner.x, this.owner.y,
+        this.movementTarget.x, this.movementTarget.y
+      );
+      
+      // 目標に到達した場合
+      if (distance < 5) {
+        this.movementTarget = null;
+        
+        // 一定確率で別の移動目標を作成
+        if (Math.random() < 0.3) {
+          setTimeout(() => {
+            if (this.isRunning) {
+              this.createMovementTarget();
+            }
+          }, 1000 + Math.random() * 1000);
+        } else {
+          this.createMovementTarget();
+        }
+      } else {
+        // 目標に向かってゆっくり移動
+        this.moveTowards(this.movementTarget, delta, 0.3);
+      }
+    }
+  }
+
+  /**
+   * 巡回アクションの更新
+   * @param {number} time - 現在時間
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updatePatrol(time, delta) {
+    if (!this.owner || this.patrolPoints.length === 0) {
+      this.complete();
+      return;
+    }
+    
+    // 待機中の場合
+    if (this.isWaiting) {
+      if (time >= this.waitUntilTime) {
+        // 待機終了、次のポイントへ
+        this.isWaiting = false;
+        this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
+        this.moveToPatrolPoint();
+      }
+      return;
+    }
+    
+    // 現在のパトロールポイント
+    const currentPoint = this.patrolPoints[this.patrolIndex];
+    
+    // ポイントとの距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      currentPoint.x, currentPoint.y
+    );
+    
+    // ポイントに到達した場合
+    if (distance < 10) {
+      // ポイントで待機
+      this.isWaiting = true;
+      this.waitUntilTime = time + this.waitTimeAtPoints;
+      return;
+    }
+    
+    // ポイントに向かって移動
+    this.moveTowards(currentPoint, delta, 0.8);
+  }
+
+  /**
+   * 逃走アクションの更新
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateFlee(delta) {
+    if (!this.owner || !this.target) {
+      this.complete();
+      return;
+    }
+    
+    // ターゲットとの距離を計算
     const distance = getDistance(
       this.owner.x, this.owner.y,
       this.target.x, this.target.y
     );
+    
+    // 安全な距離まで逃げた場合
+    if (distance >= this.safeDistance) {
+      this.complete();
+      return;
+    }
+    
+    // 逃走方向に移動
+    if (this.safePoint) {
+      this.moveTowards(this.safePoint, delta, this.fleeSpeed);
+    } else {
+      this.fleeFromTarget(delta);
+    }
+  }
 
-    const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
-    const attackRange = this.range * tileSize;
-    
-    if (distance > attackRange) {
-      // 範囲外なら失敗
+  /**
+   * 帰還アクションの更新
+   * @param {number} time - 現在時間
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateReturn(time, delta) {
+    if (!this.owner || !this.homePoint) {
+      this.complete();
       return;
     }
     
-    // 攻撃方向を向く
-    this.faceTarget();
+    // ホームポイントとの距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      this.homePoint.x, this.homePoint.y
+    );
     
-    // 攻撃アニメーション
-    this.owner.animationState = 'attack';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
-    }
-    
-    // 攻撃音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
-    }
-    
-    // 攻撃エフェクトの表示
-    if (this.effectKey && this.scene.effectFactory) {
-      const effect = this.scene.effectFactory.createEffect({
-        type: 'visual',
-        name: this.effectKey,
-        x: this.target.x,
-        y: this.target.y,
-        scene: this.scene
-      });
-      
-      if (effect) {
-        this.addEffect(effect);
-      }
-    }
-    
-    // 攻撃判定（タイミングをずらす）
-    this.scene.time.delayedCall(300, () => {
-      // オーナーまたはターゲットが既に死亡している場合は攻撃中止
-      if (this.owner.isDead || this.target.isDead) {
-        this.complete();
-        return;
-      }
-      
-      // 範囲攻撃の場合
-      if (this.areaOfEffect) {
-        // 範囲内の全ターゲットにダメージ
-        const targets = this.findTargetsInArea(this.target.x, this.target.y, this.areaRadius);
-        
-        for (const target of targets) {
-          this.applyAttackDamage(target);
-        }
-      } 
-      // 単体攻撃
-      else {
-        this.applyAttackDamage(this.target);
-      }
-      
-      // 攻撃成功
-      this.success = true;
-    });
-    
-    // アクション終了タイマー
-    this.scene.time.delayedCall(this.duration || 500, () => {
-      // アニメーションを戻す
-      this.owner.animationState = 'idle';
-      if (this.owner.playAnimation) {
-        this.owner.playAnimation();
-      }
-      
-      // アクション完了
+    // ホームポイントに到達した場合
+    if (distance < 20) {
       this.complete();
-    });
-  }
-  
-  // 魔法詠唱アクションの実行
-  executeCast() {
-    if (!this.owner) return;
-    
-    // 詠唱対象の設定
-    if (this.target === null && this.position === null) {
-      // 対象が設定されていない場合、近くの敵を自動選択
-      this.target = this.findNearestEnemy();
-      
-      if (!this.target) {
-        // 対象がいない場合は失敗
-        return;
-      }
-    }
-    
-    // 対象方向を向く
-    if (this.target) {
-      this.faceTarget();
-    } else if (this.position) {
-      this.facePosition();
-    }
-    
-    // 詠唱アニメーション
-    this.owner.animationState = 'cast';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
-    }
-    
-    // 詠唱エフェクト
-    if (this.effectKey && this.scene.effectFactory) {
-      const effect = this.scene.effectFactory.createEffect({
-        type: 'visual',
-        name: 'cast_effect',
-        x: this.owner.x,
-        y: this.owner.y,
-        scene: this.scene
-      });
-      
-      if (effect) {
-        this.addEffect(effect);
-      }
-    }
-    
-    // 詠唱音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
-    }
-    
-    // 詠唱完了時の処理
-    this.scene.time.delayedCall(this.duration || 800, () => {
-      // 詠唱エフェクトの終了
-      this.cleanupEffects();
-      
-      // 対象にエフェクト適用
-      if (this.target && !this.target.isDead) {
-        // 範囲攻撃の場合
-        if (this.areaOfEffect) {
-          // 範囲内の全ターゲットにダメージ
-          const targets = this.findTargetsInArea(this.target.x, this.target.y, this.areaRadius);
-          
-          for (const target of targets) {
-            this.applySpellEffect(target);
-          }
-        } 
-        // 単体攻撃
-        else {
-          this.applySpellEffect(this.target);
-        }
-      } 
-      // 位置指定の場合
-      else if (this.position) {
-        // 範囲内の全ターゲットにダメージ
-        const targets = this.findTargetsInArea(this.position.x, this.position.y, this.areaRadius);
-        
-        for (const target of targets) {
-          this.applySpellEffect(target);
-        }
-      }
-      
-      // アニメーションを戻す
-      this.owner.animationState = 'idle';
-      if (this.owner.playAnimation) {
-        this.owner.playAnimation();
-      }
-      
-      // 詠唱成功
-      this.success = true;
-      
-      // アクション完了
-      this.complete();
-    });
-  }
-  
-  // 回復アクションの実行
-  executeHeal() {
-    if (!this.owner) return;
-    
-    // 回復対象の設定
-    if (!this.target) {
-      // デフォルトは自分自身
-      this.target = this.owner;
-    }
-    
-    // 回復アニメーション
-    this.owner.animationState = 'cast';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
-    }
-    
-    // 回復エフェクト
-    if (this.effectKey && this.scene.effectFactory) {
-      const effect = this.scene.effectFactory.createEffect({
-        type: 'visual',
-        name: 'heal_effect',
-        x: this.target.x,
-        y: this.target.y,
-        scene: this.scene
-      });
-      
-      if (effect) {
-        this.addEffect(effect);
-      }
-    }
-    
-    // 回復音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
-    }
-    
-    // 回復値の計算
-    let healAmount = this.value;
-    
-    // レベルによる補正
-    if (this.owner.level) {
-      healAmount += Math.floor(healAmount * (this.owner.level * 0.1));
-    }
-    
-    // 回復実行
-    this.scene.time.delayedCall(300, () => {
-      // 範囲回復の場合
-      if (this.areaOfEffect) {
-        // 範囲内の全味方に回復
-        const targets = this.findFriendliesInArea(this.target.x, this.target.y, this.areaRadius);
-        
-        for (const target of targets) {
-          this.applyHeal(target, healAmount);
-        }
-      } 
-      // 単体回復
-      else {
-        this.applyHeal(this.target, healAmount);
-      }
-      
-      // 回復成功
-      this.success = true;
-    });
-    
-    // アクション終了タイマー
-    this.scene.time.delayedCall(this.duration || 500, () => {
-      // アニメーションを戻す
-      this.owner.animationState = 'idle';
-      if (this.owner.playAnimation) {
-        this.owner.playAnimation();
-      }
-      
-      // アクション完了
-      this.complete();
-    });
-  }
-  
-  // アイテム使用アクションの実行
-  executeUseItem() {
-    if (!this.owner) return;
-    
-    // アイテムの設定
-    if (!this.target) {
-      // targetがアイテムオブジェクト
       return;
     }
     
-    // アイテム使用アニメーション
-    this.owner.animationState = 'use';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
+    // 経路探索が有効な場合
+    if (this.path && this.path.length > 0) {
+      // パスに沿って移動
+      this.followPath(delta);
+    } else {
+      // 直接ホームポイントに向かって移動
+      this.moveTowards(this.homePoint, delta, this.returnSpeed);
     }
     
-    // アイテム使用音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
+    // 一定間隔でパスを更新
+    if (time - this.lastPathUpdateTime > 1000) {
+      this.updateReturnPath();
+      this.lastPathUpdateTime = time;
+    }
+  }
+
+  /**
+   * 追跡アクションの更新
+   * @param {number} time - 現在時間
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  updateChase(time, delta) {
+    if (!this.owner || !this.target) {
+      this.complete();
+      return;
     }
     
-    // アイテム使用エフェクト
-    if (this.effectKey && this.scene.effectFactory) {
-      const effect = this.scene.effectFactory.createEffect({
-        type: 'visual',
-        name: this.effectKey,
-        x: this.owner.x,
-        y: this.owner.y,
-        scene: this.scene
+    // ターゲットの生存確認
+    if (this.target.life <= 0) {
+      this.complete();
+      return;
+    }
+    
+    // ターゲットとの距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      this.target.x, this.target.y
+    );
+    
+    // 最大追跡距離を超えた場合
+    if (distance > this.maxChaseDistance) {
+      this.complete();
+      return;
+    }
+    
+    // 最小距離以下になった場合
+    if (distance <= this.minDistance) {
+      this.complete();
+      return;
+    }
+    
+    // 経路探索が有効な場合
+    if (this.path && this.path.length > 0) {
+      // パスに沿って移動
+      this.followPath(delta);
+    } else {
+      // 直接ターゲットに向かって移動
+      this.moveTowards(this.target, delta, this.chaseSpeed);
+    }
+    
+    // 一定間隔でパスを更新
+    if (time - this.lastPathUpdateTime > this.updatePathInterval) {
+      this.updateChasePath();
+      this.lastPathUpdateTime = time;
+    }
+  }
+
+  /**
+   * 攻撃の当たり判定処理
+   */
+  processAttackHit() {
+    if (!this.owner || !this.target) return;
+    
+    // 攻撃範囲内にいるか確認
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      this.target.x, this.target.y
+    );
+    
+    if (distance <= this.attackRange) {
+      // ダメージ適用
+      if (this.target.takeDamage) {
+        this.target.takeDamage(this.damage, this.damageType, false, this.owner);
+      }
+      
+      // 攻撃ヒットエフェクト
+      this.showHitEffect();
+    }
+  }
+
+  /**
+   * 攻撃エフェクトの表示
+   */
+  showAttackEffect() {
+    if (!this.scene || !this.owner) return;
+    
+    // 攻撃方向
+    const direction = this.getDirectionToTarget() || this.owner.direction || 'down';
+    
+    // 攻撃タイプに応じたエフェクト
+    let effectKey = 'slash_effect';
+    
+    // 武器タイプに応じて変更
+    if (this.owner.isUsingRangedWeapon && this.owner.isUsingRangedWeapon()) {
+      effectKey = 'bullet_effect';
+    } else if (!this.owner.isUsingMeleeWeapon || !this.owner.isUsingMeleeWeapon()) {
+      effectKey = 'punch_effect';
+    }
+    
+    // エフェクト位置
+    let effectX = this.owner.x;
+    let effectY = this.owner.y;
+    
+    // 方向に応じてオフセット
+    const offset = 40;
+    switch (direction) {
+      case 'right':
+        effectX += offset;
+        break;
+      case 'left':
+        effectX -= offset;
+        break;
+      case 'down':
+        effectY += offset;
+        break;
+      case 'up':
+        effectY -= offset;
+        break;
+    }
+    
+    // エフェクト表示
+    if (this.scene.add) {
+      const effect = this.scene.add.sprite(effectX, effectY, effectKey);
+      effect.setScale(0.5);
+      effect.setDepth(50);
+      
+      // アニメーション再生
+      const animKey = effectKey.replace('_effect', '_anim');
+      if (effect.play) {
+        effect.play(animKey);
+      }
+      
+      // 範囲攻撃の場合は大きくする
+      if (this.isAreaAttack) {
+        effect.setScale(1.5);
+      }
+      
+      // アニメーション終了時に削除
+      effect.once('animationcomplete', () => {
+        effect.destroy();
       });
       
-      if (effect) {
-        this.addEffect(effect);
+      // エフェクトをリストに追加
+      this.addEffect(effect);
+    }
+  }
+
+  /**
+   * 攻撃ヒットエフェクトの表示
+   */
+  showHitEffect() {
+    if (!this.scene || !this.target) return;
+    
+    // ヒットエフェクト位置
+    const effectX = this.target.x;
+    const effectY = this.target.y;
+    
+    // エフェクト表示
+    if (this.scene.add) {
+      const effect = this.scene.add.sprite(effectX, effectY, 'impact_effect');
+      effect.setScale(0.5);
+      effect.setDepth(50);
+      
+      // アニメーション再生
+      if (effect.play) {
+        effect.play('impact_anim');
       }
+      
+      // アニメーション終了時に削除
+      effect.once('animationcomplete', () => {
+        effect.destroy();
+      });
+      
+      // エフェクトをリストに追加
+      this.addEffect(effect);
+    }
+  }
+
+  /**
+   * 指定された位置に向かって移動
+   * @param {object} position - 目標位置
+   * @param {number} delta - 前回更新からの経過時間
+   * @param {number} speedMultiplier - 速度倍率
+   */
+  moveTowards(position, delta, speedMultiplier = 1.0) {
+    if (!this.owner || !position) return;
+    
+    // 方向ベクトルを計算
+    const dx = position.x - this.owner.x;
+    const dy = position.y - this.owner.y;
+    
+    // 方向を正規化
+    const length = Math.sqrt(dx * dx + dy * dy);
+    if (length === 0) return;
+    
+    const dirX = dx / length;
+    const dirY = dy / length;
+    
+    // 移動速度
+    const speed = this.moveSpeed * speedMultiplier;
+    
+    // 移動距離を計算
+    const moveDistance = speed * delta / 1000; // 秒単位に変換
+    
+    // 新しい位置を計算
+    const newX = this.owner.x + dirX * moveDistance;
+    const newY = this.owner.y + dirY * moveDistance;
+    
+    // キャラクターの位置を更新
+    if (this.owner.move) {
+      this.owner.move(newX, newY);
+    } else {
+      this.owner.x = newX;
+      this.owner.y = newY;
     }
     
-    // アイテム使用
-    this.scene.time.delayedCall(300, () => {
-      // アイテム使用処理
-      if (this.target.use && this.target.use(this.owner)) {
-        // 使用成功
-        this.success = true;
+    // 移動方向を向く
+    if (this.owner.setDirection) {
+      const angle = Math.atan2(dy, dx);
+      this.owner.setDirection(angle);
+    } else if (this.owner.direction !== undefined) {
+      // トップダウン向けに4方向に単純化
+      if (Math.abs(dx) > Math.abs(dy)) {
+        this.owner.direction = dx > 0 ? 'right' : 'left';
+      } else {
+        this.owner.direction = dy > 0 ? 'down' : 'up';
       }
-    });
-    
-    // アクション終了タイマー
-    this.scene.time.delayedCall(this.duration || 500, () => {
-      // アニメーションを戻す
-      this.owner.animationState = 'idle';
+      
+      // アニメーション更新
       if (this.owner.playAnimation) {
         this.owner.playAnimation();
       }
-      
-      // アクション完了
-      this.complete();
-    });
+    }
   }
-  
-  // インタラクションアクションの実行
-  executeInteract() {
-    if (!this.owner) return;
+
+  /**
+   * 計算された経路に沿って移動
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  followPath(delta) {
+    if (!this.owner || !this.path || this.pathIndex >= this.path.length) return;
     
-    // インタラクション対象の設定
-    if (!this.target) {
-      // 対象が設定されていない場合、近くのインタラクティブなオブジェクトを自動選択
-      this.target = this.findNearestInteractive();
+    // 現在のウェイポイント
+    const waypoint = this.path[this.pathIndex];
+    
+    // ウェイポイントとの距離を計算
+    const distance = getDistance(
+      this.owner.x, this.owner.y,
+      waypoint.x, waypoint.y
+    );
+    
+    // ウェイポイントに到達した場合
+    if (distance < 5) {
+      this.pathIndex++;
       
-      if (!this.target) {
-        // 対象がいない場合は失敗
+      // 全ウェイポイントを移動し終えた場合
+      if (this.pathIndex >= this.path.length) {
         return;
       }
     }
     
-    // 対象方向を向く
-    this.faceTarget();
+    // 次のウェイポイントへ移動
+    const speedMultiplier = this.actionType === 'chase' ? this.chaseSpeed :
+                           this.actionType === 'return' ? this.returnSpeed : 1.0;
+    this.moveTowards(waypoint, delta, speedMultiplier);
+  }
+
+  /**
+   * ターゲットから逃げる
+   * @param {number} delta - 前回更新からの経過時間
+   */
+  fleeFromTarget(delta) {
+    if (!this.owner || !this.target) return;
     
-    // インタラクションアニメーション
-    this.owner.animationState = 'interact';
-    if (this.owner.playAnimation) {
-      this.owner.playAnimation();
+    // 逃走方向を計算
+    const dx = this.owner.x - this.target.x;
+    const dy = this.owner.y - this.target.y;
+    
+    // 方向を正規化
+    const length = Math.sqrt(dx * dx + dy * dy);
+    if (length === 0) return;
+    
+    const dirX = dx / length;
+    const dirY = dy / length;
+    
+    // 移動速度
+    const speed = this.moveSpeed * this.fleeSpeed;
+    
+    // 移動距離を計算
+    const moveDistance = speed * delta / 1000; // 秒単位に変換
+    
+    // 新しい位置を計算
+    const newX = this.owner.x + dirX * moveDistance;
+    const newY = this.owner.y + dirY * moveDistance;
+    
+    // キャラクターの位置を更新
+    if (this.owner.move) {
+      this.owner.move(newX, newY);
+    } else {
+      this.owner.x = newX;
+      this.owner.y = newY;
     }
     
-    // インタラクション音を再生
-    if (this.soundKey && this.scene.sound) {
-      this.scene.sound.play(this.soundKey);
-    }
-    
-    // インタラクション処理
-    this.scene.time.delayedCall(300, () => {
-      // インタラクション対象の処理呼び出し
-      if (this.target.interact && this.target.interact(this.owner)) {
-        // インタラクション成功
-        this.success = true;
+    // 移動方向を向く
+    if (this.owner.setDirection) {
+      // 逆方向を向く（逃げるので）
+      const angle = Math.atan2(-dy, -dx);
+      this.owner.setDirection(angle);
+    } else if (this.owner.direction !== undefined) {
+      // トップダウン向けに4方向に単純化
+      if (Math.abs(dx) > Math.abs(dy)) {
+        this.owner.direction = dx > 0 ? 'right' : 'left';
+      } else {
+        this.owner.direction = dy > 0 ? 'down' : 'up';
       }
-    });
-    
-    // アクション終了タイマー
-    this.scene.time.delayedCall(this.duration || 500, () => {
-      // アニメーションを戻す
-      this.owner.animationState = 'idle';
+      
+      // アニメーション更新
       if (this.owner.playAnimation) {
         this.owner.playAnimation();
       }
-      
-      // アクション完了
-      this.complete();
-    });
+    }
   }
-  
-  // アクション完了時の処理
+
+  /**
+   * 安全ポイントを見つける
+   */
+  findSafePoint() {
+    if (!this.owner || !this.target) return;
+    
+    // ターゲットから逃げる方向ベクトルを計算
+    const dx = this.owner.x - this.target.x;
+    const dy = this.owner.y - this.target.y;
+    
+    // 方向を正規化
+    const length = Math.sqrt(dx * dx + dy * dy);
+    if (length === 0) return;
+    
+    const dirX = dx / length;
+    const dirY = dy / length;
+    
+    // 逃走距離で安全ポイントを計算
+    const safeX = this.owner.x + dirX * this.fleeDistance;
+    const safeY = this.owner.y + dirY * this.fleeDistance;
+    
+    // ナビゲーションメッシュに安全ポイントを投影（実装があれば）
+    if (this.topDownMap && this.topDownMap.projectPoint) {
+      const tilePos = this.topDownMap.worldToTileXY(safeX, safeY);
+      
+      // 移動可能かチェック
+      if (this.topDownMap.isWalkableAt && this.topDownMap.isWalkableAt(tilePos.x, tilePos.y)) {
+        const worldPos = this.topDownMap.tileToWorldXY(tilePos.x, tilePos.y);
+        this.safePoint = worldPos;
+        return;
+      }
+    }
+    
+    // ナビゲーションメッシュがない場合はそのままポイントを設定
+    this.safePoint = { x: safeX, y: safeY };
+  }
+
+  /**
+   * 帰還経路の更新
+   */
+  updateReturnPath() {
+    if (!this.owner || !this.homePoint || !this.topDownMap) return;
+    
+    // 現在位置をタイル座標に変換
+    const ownerTile = this.topDownMap.worldToTileXY(this.owner.x, this.owner.y);
+    
+    // ホームポイントをタイル座標に変換
+    const homeTile = this.topDownMap.worldToTileXY(this.homePoint.x, this.homePoint.y);
+    
+    // 経路探索
+    const tilePath = this.topDownMap.findPath(
+      ownerTile.x, ownerTile.y,
+      homeTile.x, homeTile.y
+    );
+    
+    // 経路が見つかった場合
+    if (tilePath && tilePath.length > 0) {
+      // タイル座標をワールド座標に変換
+      this.path = tilePath.map(point => {
+        const worldPos = this.topDownMap.tileToWorldXY(point.x, point.y);
+        return { x: worldPos.x, y: worldPos.y };
+      });
+      
+      // パスインデックスをリセット
+      this.pathIndex = 0;
+    } else {
+      // 経路が見つからない場合は直接移動
+      this.path = [];
+    }
+  }
+
+  /**
+   * 追跡経路の更新
+   */
+  updateChasePath() {
+    if (!this.owner || !this.target || !this.topDownMap) return;
+    
+    // 現在位置をタイル座標に変換
+    const ownerTile = this.topDownMap.worldToTileXY(this.owner.x, this.owner.y);
+    
+    // ターゲット位置をタイル座標に変換
+    const targetTile = this.topDownMap.worldToTileXY(this.target.x, this.target.y);
+    
+    // 経路探索
+    const tilePath = this.topDownMap.findPath(
+      ownerTile.x, ownerTile.y,
+      targetTile.x, targetTile.y
+    );
+    
+    // 経路が見つかった場合
+    if (tilePath && tilePath.length > 0) {
+      // タイル座標をワールド座標に変換
+      this.path = tilePath.map(point => {
+        const worldPos = this.topDownMap.tileToWorldXY(point.x, point.y);
+        return { x: worldPos.x, y: worldPos.y };
+      });
+      
+      // パスインデックスをリセット
+      this.pathIndex = 0;
+    } else {
+      // 経路が見つからない場合は直接移動
+      this.path = [];
+    }
+  }
+
+  /**
+   * ランダムな移動目標を生成
+   */
+  createMovementTarget() {
+    if (!this.owner) return;
+    
+    // ランダムな角度と距離を生成
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.random() * this.movementRadius;
+    
+    // 新しい位置を計算
+    const x = this.owner.x + Math.cos(angle) * distance;
+    const y = this.owner.y + Math.sin(angle) * distance;
+    
+    // ナビゲーションメッシュで移動可能かチェック
+    if (this.topDownMap && this.topDownMap.worldToTileXY) {
+      const tilePos = this.topDownMap.worldToTileXY(x, y);
+      
+      // 移動可能かチェック
+      if (this.topDownMap.isWalkableAt && this.topDownMap.isWalkableAt(tilePos.x, tilePos.y)) {
+        const worldPos = this.topDownMap.tileToWorldXY(tilePos.x, tilePos.y);
+        this.movementTarget = worldPos;
+        return;
+      }
+    }
+    
+    // ナビゲーションメッシュがない場合はそのままポイントを設定
+    this.movementTarget = { x, y };
+  }
+
+  /**
+   * ランダムなパトロールポイントを生成
+   */
+  generateRandomPatrolPoints() {
+    if (!this.owner || !this.topDownMap) return;
+    
+    this.patrolPoints = [];
+    
+    // キャラクターの現在位置を開始点として使用
+    const startX = this.owner.x;
+    const startY = this.owner.y;
+    
+    // ランダムポイント生成半径 - デフォルト値
+    const radius = this.randomPointRadius || 200;
+    
+    // ランダムポイント数 - デフォルト値
+    const count = this.randomPointCount || 5;
+    
+    // 指定数のランダムポイントを生成
+    for (let i = 0; i < count; i++) {
+      // ランダムな角度と距離を生成
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.random() * radius;
+      
+      // 新しい位置を計算
+      const x = startX + Math.cos(angle) * distance;
+      const y = startY + Math.sin(angle) * distance;
+      
+      // タイル座標に変換
+      const tilePos = this.topDownMap.worldToTileXY(x, y);
+      
+      // 移動可能かチェック
+      if (this.topDownMap.isWalkableAt && this.topDownMap.isWalkableAt(tilePos.x, tilePos.y)) {
+        const worldPos = this.topDownMap.tileToWorldXY(tilePos.x, tilePos.y);
+        this.patrolPoints.push(worldPos);
+      }
+    }
+    
+    // 最初のポイントをキャラクターの現在位置に設定
+    if (this.patrolPoints.length > 0) {
+      this.patrolPoints[0] = { x: startX, y: startY };
+    } else {
+      // ポイントが見つからなかった場合は現在位置を追加
+      this.patrolPoints.push({ x: startX, y: startY });
+    }
+    
+    // パトロールインデックスをリセット
+    this.patrolIndex = 0;
+  }
+
+  /**
+   * パトロールポイントへの移動
+   */
+  moveToPatrolPoint() {
+    if (!this.owner || this.patrolPoints.length === 0) return;
+    
+    // 現在のパトロールポイント
+    const currentPoint = this.patrolPoints[this.patrolIndex];
+    
+    // 経路探索が有効な場合
+    if (this.topDownMap && this.topDownMap.findPath) {
+      // 現在位置をタイル座標に変換
+      const ownerTile = this.topDownMap.worldToTileXY(this.owner.x, this.owner.y);
+      
+      // ポイント位置をタイル座標に変換
+      const pointTile = this.topDownMap.worldToTileXY(currentPoint.x, currentPoint.y);
+      
+      // 経路探索
+      const tilePath = this.topDownMap.findPath(
+        ownerTile.x, ownerTile.y,
+        pointTile.x, pointTile.y
+      );
+      
+      // 経路が見つかった場合
+      if (tilePath && tilePath.length > 0) {
+        // タイル座標をワールド座標に変換
+        this.path = tilePath.map(point => {
+          const worldPos = this.topDownMap.tileToWorldXY(point.x, point.y);
+          return { x: worldPos.x, y: worldPos.y };
+        });
+        
+        // パスインデックスをリセット
+        this.pathIndex = 0;
+      }
+    }
+  }
+
+  /**
+   * アクションタイプに応じた完了処理
+   */
   handleActionCompletion() {
-    // アクションタイプに応じた完了処理
-    switch (this.type) {
-      case ActionType.ATTACK:
-        // 攻撃クールダウンの設定
+    // アクションタイプごとの特別な完了処理
+    switch (this.actionType) {
+      case 'move':
+        // 移動完了
         if (this.owner) {
-          this.owner.lastAttackTime = Date.now();
+          // 移動アニメーション停止
+          if (this.owner.setAnimation) {
+            this.owner.setAnimation('idle');
+          } else if (this.owner.animationState) {
+            this.owner.animationState = 'idle';
+            if (this.owner.playAnimation) {
+              this.owner.playAnimation();
+            }
+          }
+          
+          // 移動完了イベント
+          if (this.scene) {
+            this.scene.events.emit('move-completed', this.owner);
+          }
         }
         break;
-      
-      case ActionType.CAST:
-        // 詠唱クールダウンの設定
-        if (this.owner && this.owner.setSkillCooldown) {
-          this.owner.setSkillCooldown(this.name, this.cooldown || 1000);
+        
+      case 'attack':
+        // 攻撃完了
+        if (this.owner) {
+          // 攻撃アニメーション停止
+          if (this.owner.setAnimation) {
+            this.owner.setAnimation('idle');
+          } else if (this.owner.animationState) {
+            this.owner.animationState = 'idle';
+            if (this.owner.playAnimation) {
+              this.owner.playAnimation();
+            }
+          }
+          
+          // 攻撃完了イベント
+          if (this.scene) {
+            this.scene.events.emit('attack-completed', {
+              owner: this.owner,
+              target: this.target,
+              damage: this.damage,
+              damageType: this.damageType
+            });
+          }
         }
         break;
-      
+        
+      // 他のアクションタイプの完了処理
       default:
-        break;
-    }
-  }
-  
-  // 攻撃ダメージの適用
-  applyAttackDamage(target) {
-    if (!target || target.isDead) return;
-    
-    // ダメージ計算
-    let damage = this.calculateDamage();
-    
-    // クリティカル判定
-    const isCritical = this.checkCriticalHit();
-    if (isCritical) {
-      damage = Math.floor(damage * this.owner.criticalDamage);
-    }
-    
-    // HIT判定
-    const isHit = this.checkHit(target);
-    if (!isHit) {
-      // ミス表示
-      this.showMissEffect(target);
-      return;
-    }
-    
-    // ダメージタイプ
-    const damageType = this.element || 'physical';
-    
-    // ダメージを与える
-    target.takeDamage(damage, damageType, isCritical, this.owner);
-    
-    // ライフスティール効果
-    if (this.owner.lifeLeech > 0) {
-      const leechAmount = Math.floor(damage * (this.owner.lifeLeech / 100));
-      if (leechAmount > 0) {
-        this.owner.heal(leechAmount);
-      }
-    }
-    
-    // マナスティール効果
-    if (this.owner.manaLeech > 0) {
-      const leechAmount = Math.floor(damage * (this.owner.manaLeech / 100));
-      if (leechAmount > 0) {
-        this.owner.restoreMana(leechAmount);
-      }
-    }
-  }
-  
-  // 魔法効果の適用
-  applySpellEffect(target) {
-    if (!target || target.isDead) return;
-    
-    // 魔法ダメージ計算
-    let damage = this.calculateSpellDamage();
-    
-    // クリティカル判定
-    const isCritical = this.checkCriticalHit();
-    if (isCritical) {
-      damage = Math.floor(damage * this.owner.criticalDamage);
-    }
-    
-    // 魔法命中率は通常100%（抵抗判定はダメージメソッド内で行う）
-    
-    // ダメージタイプ
-    const damageType = this.element || 'physical';
-    
-    // ダメージを与える
-    target.takeDamage(damage, damageType, isCritical, this.owner);
-    
-    // 追加効果（状態異常など）
-    if (this.statusEffect) {
-      this.applyStatusEffect(target);
-    }
-  }
-  
-  // 状態異常効果の適用
-  applyStatusEffect(target) {
-    if (!target || target.isDead || !this.statusEffect) return;
-    
-    // 状態異常の効果生成
-    const effect = new Effect({
-      name: this.statusEffect.name,
-      type: 'debuff',
-      description: this.statusEffect.description,
-      duration: this.statusEffect.duration,
-      scene: this.scene,
-      source: this.owner,
-      target: target,
-      value: {
-        effectType: this.statusEffect.type,
-        effects: this.statusEffect.effects
-      }
-    });
-    
-    // 対象に状態異常を適用
-    if (target.addDebuff) {
-      target.addDebuff(effect);
-    }
-  }
-  
-  // 回復効果の適用
-  applyHeal(target, amount) {
-    if (!target || target.isDead) return;
-    
-    // 回復処理
-    if (target.heal) {
-      target.heal(amount);
-    }
-  }
-  
-  // ダメージ計算
-  calculateDamage() {
-    if (!this.owner) return this.value;
-    
-    // 基本ダメージ
-    let baseDamage = this.value || this.owner.basicAttack || 1;
-    
-    // 武器による追加ダメージ
-    if (this.owner.bonusAttack) {
-      baseDamage *= (1 + this.owner.bonusAttack);
-    }
-    
-    // レベルによるボーナス
-    if (this.owner.level) {
-      baseDamage *= (1 + this.owner.level * 0.05);
-    }
-    
-    // 筋力によるボーナス（近接攻撃）
-    if (this.element === 'physical' && this.owner.strength) {
-      baseDamage *= (1 + this.owner.strength * 0.01);
-    }
-    
-    // 器用さによるボーナス（遠距離攻撃）
-    if (this.range > 1 && this.owner.dexterity) {
-      baseDamage *= (1 + this.owner.dexterity * 0.01);
-    }
-    
-    // 属性ダメージの追加
-    if (this.element === 'fire' && this.owner.fireDamage) {
-      baseDamage += this.owner.fireDamage;
-    } else if (this.element === 'cold' && this.owner.coldDamage) {
-      baseDamage += this.owner.coldDamage;
-    } else if (this.element === 'poison' && this.owner.poisonDamage) {
-      baseDamage += this.owner.poisonDamage;
-    } else if (this.element === 'electric' && this.owner.electricDamage) {
-      baseDamage += this.owner.electricDamage;
-    }
-    
-    return Math.floor(baseDamage);
-  }
-  
-  // 魔法ダメージ計算
-  calculateSpellDamage() {
-    if (!this.owner) return this.value;
-    
-    // 基本ダメージ
-    let baseDamage = this.value || 1;
-    
-    // レベルによるボーナス
-    if (this.owner.level) {
-      baseDamage *= (1 + this.owner.level * 0.05);
-    }
-    
-    // エネルギーによるボーナス（魔法攻撃）
-    if (this.owner.energy) {
-      baseDamage *= (1 + this.owner.energy * 0.02);
-    }
-    
-    // 魔法ダメージボーナス
-    if (this.owner.spellDamageBonus) {
-      baseDamage *= (1 + this.owner.spellDamageBonus / 100);
-    }
-    
-    return Math.floor(baseDamage);
-  }
-  
-  // クリティカルヒット判定
-  checkCriticalHit() {
-    if (!this.owner) return false;
-    
-    // クリティカル率の取得
-    const critRate = this.owner.criticalRate || 5; // デフォルト5%
-    
-    // 判定
-    return Math.random() * 100 < critRate;
-  }
-  
-  // HIT判定
-  checkHit(target) {
-    if (!this.owner || !target) return true;
-    
-    // AR（命中率）と回避値の取得
-    const ar = this.owner.finalAR || 70; // デフォルト70%
-    const evade = target.evade || target.basicDefence || 0;
-    
-    // 必中の場合
-    if (ar >= 95) return true;
-    
-    // 絶対回避の場合
-    if (evade >= 95) return false;
-    
-    // 命中率計算
-    const hitChance = Math.min(95, Math.max(5, ar - evade));
-    
-    // 判定
-    return Math.random() * 100 < hitChance;
-  }
-  
-  // ミス表示エフェクト
-  showMissEffect(target) {
-    if (!this.scene || !target) return;
-    
-    // ミステキスト
-    const missText = this.scene.add.text(
-      target.x,
-      target.y - 20,
-      'MISS',
-      { 
-        fontFamily: 'Arial', 
-        fontSize: 16, 
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 3
-      }
-    ).setOrigin(0.5, 0.5);
-    
-    // アニメーション
-    this.scene.tweens.add({
-      targets: missText,
-      y: missText.y - 30,
-      alpha: 0,
-      duration: 800,
-      onComplete: () => {
-        missText.destroy();
-      }
-    });
-  }
-  
-  // 最も近い敵を探す
-  findNearestEnemy() {
-    if (!this.owner || !this.scene) return null;
-    
-    const enemies = this.scene.enemies || [];
-    let nearestEnemy = null;
-    let nearestDistance = Number.MAX_VALUE;
-    
-    for (const enemy of enemies) {
-      if (enemy.isDead) continue;
-      
-      const distance = getDistance(
-        this.owner.x, this.owner.y,
-        enemy.x, enemy.y
-      );
-      
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestEnemy = enemy;
-      }
-    }
-    
-    return nearestEnemy;
-  }
-  
-  // 最も近いインタラクティブオブジェクトを探す
-  findNearestInteractive() {
-    if (!this.owner || !this.scene) return null;
-    
-    const interactiveObjects = [
-      ...(this.scene.npcs || []),
-      ...(this.scene.items || []).filter(item => item.canInteract)
-    ];
-    
-    let nearestObject = null;
-    let nearestDistance = Number.MAX_VALUE;
-    
-    for (const obj of interactiveObjects) {
-      if (obj.isDead || !obj.canInteract) continue;
-      
-      const distance = getDistance(
-        this.owner.x, this.owner.y,
-        obj.x, obj.y
-      );
-      
-      if (distance < nearestDistance && distance <= 100) { // 100pxの範囲内のみ
-        nearestDistance = distance;
-        nearestObject = obj;
-      }
-    }
-    
-    return nearestObject;
-  }
-  
-  // 範囲内の対象を探す
-  findTargetsInArea(x, y, radius) {
-    if (!this.scene) return [];
-  
-    const targets = [];
-    
-    // タイルサイズを考慮した半径の調整
-    const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
-    const adjustedRadius = radius * tileSize;
-    
-    // 敵の場合はプレイヤーとコンパニオンが対象
-    if (this.owner.constructor.name === 'Enemy') {
-      if (this.scene.player && !this.scene.player.isDead) {
-        const distance = getDistance(
-          x, y, 
-          this.scene.player.x, this.scene.player.y
-        );
-        
-        if (distance <= adjustedRadius) {
-          targets.push(this.scene.player);
+        // イベント発行
+        if (this.scene) {
+          this.scene.events.emit(`${this.actionType}-completed`, this.owner);
         }
-      }
-      
-      for (const companion of (this.scene.companions || [])) {
-        if (companion.isDead) continue;
-        
-        const distance = getDistance(
-          x, y,
-          companion.x, companion.y
-        );
-        
-        if (distance <= radius) {
-          targets.push(companion);
-        }
-      }
-    }
-    // プレイヤーやコンパニオンの場合は敵が対象
-    else {
-      for (const enemy of (this.scene.enemies || [])) {
-        if (enemy.isDead) continue;
-        
-        const distance = getDistance(
-          x, y,
-          enemy.x, enemy.y
-        );
-        
-        if (distance <= radius) {
-          targets.push(enemy);
-        }
-      }
     }
     
-    return targets;
+    super.handleActionCompletion();
   }
-  
-  // 範囲内の味方を探す
-  findFriendliesInArea(x, y, radius) {
-    if (!this.scene) return [];
-    
-    const targets = [];
-    
-    // 敵の場合は他の敵が対象
-    if (this.owner.constructor.name === 'Enemy') {
-      for (const enemy of (this.scene.enemies || [])) {
-        if (enemy.isDead || enemy === this.owner) continue;
-        
-        const distance = getDistance(
-          x, y,
-          enemy.x, enemy.y
-        );
-        
-        if (distance <= radius) {
-          targets.push(enemy);
-        }
-      }
-    }
-    // プレイヤーやコンパニオンの場合はプレイヤーとコンパニオンが対象
-    else {
-      if (this.scene.player && !this.scene.player.isDead) {
-        const distance = getDistance(
-          x, y,
-          this.scene.player.x, this.scene.player.y
-        );
-        
-        if (distance <= radius) {
-          targets.push(this.scene.player);
-        }
-      }
-      
-      for (const companion of (this.scene.companions || [])) {
-        if (companion.isDead || companion === this.owner) continue;
-        
-        const distance = getDistance(
-          x, y,
-          companion.x, companion.y
-        );
-        
-        if (distance <= radius) {
-          targets.push(companion);
-        }
-      }
-    }
-    
-    return targets;
-  }
-  
 }

@@ -1,4 +1,5 @@
 import { NodeState } from '../core/BehaviorTree';
+import { getDistance } from '../../utils/mathUtils';
 
 /**
  * DistanceDecision - 距離に基づく判断を行う
@@ -36,17 +37,19 @@ class DistanceDecision {
     }
     
     // 比較する位置を決定
-    let comparePosition = null;
+    let compareX = null;
+    let compareY = null;
     
     switch (this.options.compareMode) {
       case 'target':
         // ターゲットとの距離を比較
         const target = controller.target;
-        if (!target || target.Life <= 0) {
+        if (!target || target.life <= 0) {
           this.state = NodeState.FAILURE;
           return this.state;
         }
-        comparePosition = target.position;
+        compareX = target.x;
+        compareY = target.y;
         break;
         
       case 'home':
@@ -58,9 +61,11 @@ class DistanceDecision {
             this.state = NodeState.FAILURE;
             return this.state;
           }
-          comparePosition = originalPosition;
+          compareX = originalPosition.x;
+          compareY = originalPosition.y;
         } else {
-          comparePosition = homePoint;
+          compareX = homePoint.x;
+          compareY = homePoint.y;
         }
         break;
         
@@ -70,7 +75,8 @@ class DistanceDecision {
           this.state = NodeState.FAILURE;
           return this.state;
         }
-        comparePosition = this.options.comparePosition;
+        compareX = this.options.comparePosition.x;
+        compareY = this.options.comparePosition.y;
         break;
         
       default:
@@ -78,8 +84,15 @@ class DistanceDecision {
         return this.state;
     }
     
+    // 座標値の検証
+    if (compareX === undefined || compareY === undefined) {
+      console.warn('DistanceDecision: 距離計算のための有効な座標がありません', { compareX, compareY });
+      this.state = NodeState.FAILURE;
+      return this.state;
+    }
+    
     // 距離を計算
-    const distance = this.calculateDistance(owner.position, comparePosition);
+    const distance = getDistance(owner.x, owner.y, compareX, compareY);
     
     // 条件に基づいて判断
     let result = false;
@@ -107,24 +120,6 @@ class DistanceDecision {
     // 結果に基づいて状態を設定
     this.state = result ? NodeState.SUCCESS : NodeState.FAILURE;
     return this.state;
-  }
-
-  /**
-   * 2つの位置間の距離を計算
-   * @param {object} pos1 - 最初の位置
-   * @param {object} pos2 - 2番目の位置
-   * @returns {number} 位置間の距離
-   */
-  calculateDistance(pos1, pos2) {
-    // 位置が存在するかチェック
-    if (!pos1 || !pos2 || pos1.x === undefined || pos1.y === undefined || pos2.x === undefined || pos2.y === undefined) {
-      console.warn('DistanceDecision: Invalid positions for distance calculation', { pos1, pos2 });
-      return Infinity; // 無効な場合は無限大を返す
-    }
-    
-    const dx = pos2.x - pos1.x;
-    const dy = pos2.y - pos1.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**
