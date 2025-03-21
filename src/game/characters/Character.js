@@ -158,6 +158,12 @@ export default class Character {
   set alpha(value) {
     if (this.sprite) this.sprite.alpha = value;
   }
+
+  // スプライトデプスの設定メソッド
+  setDepth(value) {
+    if (this.sprite) this.sprite.setDepth(value);
+    return this;
+  }
   
   // スプライト関連のメソッドの委譲
   setOrigin(x, y) {

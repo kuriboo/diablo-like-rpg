@@ -1,0 +1,135 @@
+{
+    "metadata": {
+      "classType": "rogue",
+      "displayName": "盗賊",
+      "description": "素早い攻撃と隠密行動のスペシャリスト"
+    },
+    "nodes": [
+      {
+        "id": "rogue_root",
+        "type": "root",
+        "position": { "x": 400, "y": 100 },
+        "name": "盗賊の道",
+        "description": "盗賊のスキルツリーの始まり",
+        "icon": "rogue_root.png",
+        "connections": ["rogue_dex_1", "rogue_backstab", "rogue_shadow_step"]
+      },
+      {
+        "id": "rogue_dex_1",
+        "type": "passive",
+        "position": { "x": 300, "y": 200 },
+        "name": "敏捷性強化 I",
+        "description": "器用さを3ポイント増加させる",
+        "icon": "dexterity_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Dexterity",
+            "value": 3
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["rogue_dex_2"]
+      },
+      {
+        "id": "rogue_dex_2",
+        "type": "passive",
+        "position": { "x": 300, "y": 300 },
+        "name": "敏捷性強化 II",
+        "description": "器用さをさらに5ポイント増加させる",
+        "icon": "dexterity_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Dexterity",
+            "value": 5
+          }
+        ],
+        "requiredLevel": 5,
+        "requiredPoints": 1,
+        "connections": ["rogue_critical"]
+      },
+      {
+        "id": "rogue_critical",
+        "type": "passive",
+        "position": { "x": 300, "y": 400 },
+        "name": "致命打",
+        "description": "クリティカル率を10%増加させ、クリティカルダメージを20%増加させる",
+        "icon": "critical.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "CriticalRate",
+            "value": 10
+          },
+          {
+            "type": "attributeModifier",
+            "attribute": "CriticalDamage",
+            "value": 0.2
+          }
+        ],
+        "requiredLevel": 8,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "rogue_backstab",
+        "type": "skill",
+        "position": { "x": 400, "y": 200 },
+        "name": "バックスタブ",
+        "description": "背後から攻撃し、高いダメージを与える",
+        "icon": "backstab.png",
+        "actionId": "special_backstab",
+        "manaCost": 12,
+        "cooldown": 10,
+        "requiredLevel": 3,
+        "requiredPoints": 1,
+        "connections": ["rogue_stealth"]
+      },
+      {
+        "id": "rogue_stealth",
+        "type": "skill",
+        "position": { "x": 400, "y": 300 },
+        "name": "ステルス",
+        "description": "一定時間敵に発見されにくくなる。次の攻撃はクリティカル率が2倍になる",
+        "icon": "stealth.png",
+        "actionId": "special_stealth",
+        "manaCost": 20,
+        "cooldown": 30,
+        "duration": 15,
+        "requiredLevel": 7,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "rogue_shadow_step",
+        "type": "skill",
+        "position": { "x": 500, "y": 200 },
+        "name": "シャドウステップ",
+        "description": "短距離を一瞬で移動し、移動中は無敵状態になる",
+        "icon": "shadow_step.png",
+        "actionId": "special_shadow_step",
+        "manaCost": 15,
+        "cooldown": 15,
+        "requiredLevel": 4,
+        "requiredPoints": 1,
+        "connections": ["rogue_poison_blade"]
+      },
+      {
+        "id": "rogue_poison_blade",
+        "type": "skill",
+        "position": { "x": 500, "y": 300 },
+        "name": "ポイズンブレード",
+        "description": "武器に毒を塗り、次の攻撃で敵に5秒間継続ダメージを与える",
+        "icon": "poison_blade.png",
+        "actionId": "special_poison_blade",
+        "manaCost": 18,
+        "cooldown": 20,
+        "duration": 10,
+        "requiredLevel": 6,
+        "requiredPoints": 1,
+        "connections": []
+      }
+    ]
+  }

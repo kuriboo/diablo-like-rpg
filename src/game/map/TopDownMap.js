@@ -1,3 +1,6 @@
+import PlaceholderAssets from '../../debug/PlaceholderAssets';
+import { isDebugMode } from '../../debug';
+
 export default class TopDownMap {
   constructor(options = {}) {
     this.scene = options.scene;
@@ -32,6 +35,9 @@ export default class TopDownMap {
     // エンティティ管理用配列
     this.entities = [];
     
+    // デバッグモードフラグの取得
+    this.isDebugMode = isDebugMode || process.env.NODE_ENV !== 'production';
+    
     // 初期化
     this.init();
   }
@@ -40,9 +46,80 @@ export default class TopDownMap {
   init() {
     // マップデータがあれば生成を開始
     if (this.mapData) {
+      // デバッグモードではプレースホルダーを確保
+      if (this.isDebugMode) {
+        this.ensurePlaceholders();
+      }
       this.createMap();
       this.initPathfindingGrid();
     }
+  }
+  
+  // プレースホルダーを確保
+  ensurePlaceholders() {
+    // PlaceholderAssetsが初期化されていることを確認
+    if (!PlaceholderAssets.initialized) {
+      console.log('Initializing PlaceholderAssets for TopDownMap');
+      PlaceholderAssets.initialize(this.scene);
+    }
+    
+    // タイル用のプレースホルダーを確保
+    const tileTypes = ['tile_water', 'tile_grass', 'tile_dirt', 'tile_sand', 'tile_stone', 'tile_snow', 'tile_lava'];
+    
+    tileTypes.forEach(tileType => {
+      if (!this.scene.textures.exists(tileType)) {
+        console.log(`Creating placeholder for ${tileType}`);
+        // プレースホルダーを取得または生成
+        this.getPlaceholderTexture(tileType);
+      }
+    });
+  }
+  
+  // プレースホルダーテクスチャの取得/生成
+  getPlaceholderTexture(tileType) {
+    // テクスチャがすでに存在するか確認
+    if (this.scene.textures.exists(tileType)) {
+      return tileType;
+    }
+    
+    // PlaceholderAssetsから対応するタイプのプレースホルダーを取得
+    let color;
+    switch (tileType) {
+      case 'tile_water':
+        color = 0x1E90FF; // ドジャーブルー
+        break;
+      case 'tile_grass':
+        color = 0x3CB371; // ミディアムシーグリーン
+        break;
+      case 'tile_dirt':
+        color = 0x8B4513; // サドルブラウン
+        break;
+      case 'tile_sand':
+        color = 0xF4A460; // サンディブラウン
+        break;
+      case 'tile_stone':
+        color = 0x708090; // スレートグレー
+        break;
+      case 'tile_snow':
+        color = 0xFFFAFA; // スノー
+        break;
+      case 'tile_lava':
+        color = 0xFF4500; // オレンジレッド
+        break;
+      default:
+        color = 0x888888; // グレー
+    }
+    
+    // PlaceholderAssetsの適切なメソッドを使用
+    if (typeof PlaceholderAssets.createTileWithPattern === 'function') {
+      // 直接対応するメソッドを呼び出し
+      PlaceholderAssets.createTileWithPattern(this.scene, tileType, color);
+    } else {
+      // 汎用的なプレースホルダー生成メソッドを使用
+      PlaceholderAssets.createColorRect(this.scene, tileType, this.tileSize, this.tileSize, color);
+    }
+    
+    return tileType;
   }
   
   // マップデータの設定
@@ -62,6 +139,11 @@ export default class TopDownMap {
     // エンティティリストをクリア
     this.entities = [];
     
+    // デバッグモードではプレースホルダーを確保
+    if (this.isDebugMode) {
+      this.ensurePlaceholders();
+    }
+    
     // 新しいマップを生成
     this.createMap();
     this.initPathfindingGrid();
@@ -74,84 +156,149 @@ export default class TopDownMap {
       return this;
     }
     
-    // マップデータをPhaserのタイルマップに変換
-    this.map = this.scene.make.tilemap({
-      tileWidth: this.tileSize,
-      tileHeight: this.tileSize,
-      width: this.width,
-      height: this.height
-    });
-    
-    // タイルセットの作成（各タイプのタイルを登録）
-    // 注: 実際のゲームでは、画像アセットをロードしたキーを使用します
-    const tilesetKeys = [
-      'tile_water', 'tile_grass', 'tile_dirt', 'tile_sand', 
-      'tile_stone', 'tile_snow', 'tile_lava'
-    ];
-    
-    const tilesets = {};
-    
-    for (const key of tilesetKeys) {
-      if (this.scene.textures.exists(key)) {
-        tilesets[key] = this.map.addTilesetImage(key, key, this.tileSize, this.tileSize);
-      } else {
-        console.warn(`Texture '${key}' not found, using fallback`);
-        // フォールバック: 最初に見つかったテクスチャを使用
-        const firstTexture = tilesetKeys.find(k => this.scene.textures.exists(k));
-        if (firstTexture) {
-          tilesets[key] = this.map.addTilesetImage(firstTexture, firstTexture, this.tileSize, this.tileSize);
-        }
-      }
-    }
-    
-    // レイヤーの作成（地面と障害物の2レイヤー）
-    this.groundLayer = this.map.createBlankLayer('ground', tilesets);
-    this.objectLayer = this.map.createBlankLayer('objects', tilesets);
-    
-    // マップデータをもとにタイルを配置
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        // 高さデータに基づくタイルタイプの決定
-        const heightValue = this.mapData.heightMap[y][x];
-        const objectType = this.mapData.objectPlacement[y][x];
-        
-        // 高さ値からテクスチャを選択
-        const tileTextureKey = this.getTextureFromHeight(heightValue);
-        
-        // 地面レイヤーにタイルを配置
-        if (tilesets[tileTextureKey]) {
-          this.groundLayer.putTileAt(
-            this.getTileIndexForType(tileTextureKey), 
-            x, y
-          );
-        }
-        
-        // オブジェクト配置情報に基づく障害物配置
-        if (objectType === 3) { // 3は壁/障害物
-          this.objectLayer.putTileAt(
-            this.getTileIndexForType('tile_stone'), // 例として石のタイルを使用
-            x, y
-          );
+    try {
+      // マップデータをPhaserのタイルマップに変換
+      this.map = this.scene.make.tilemap({
+        tileWidth: this.tileSize,
+        tileHeight: this.tileSize,
+        width: this.width,
+        height: this.height
+      });
+      
+      // タイルセットの作成（各タイプのタイルを登録）
+      const tilesetKeys = [
+        'tile_water', 'tile_grass', 'tile_dirt', 'tile_sand', 
+        'tile_stone', 'tile_snow', 'tile_lava'
+      ];
+      
+      // 実際に利用可能なtilesetを保持
+      const tilesets = {};
+      
+      // デバッグモードの場合はプレースホルダーを使用
+      if (this.isDebugMode) {
+        for (const key of tilesetKeys) {
+          // プレースホルダーを確保
+          this.getPlaceholderTexture(key);
           
-          // 衝突判定を追加
-          const tile = this.objectLayer.getTileAt(x, y);
-          if (tile) {
-            tile.setCollision(true);
+          try {
+            const tileset = this.map.addTilesetImage(key, key, this.tileSize, this.tileSize);
+            if (tileset) {
+              tilesets[key] = tileset;
+            }
+          } catch (e) {
+            console.warn(`Failed to add tileset ${key} in debug mode: ${e.message}`);
           }
-        } else if (objectType === 2) { // 2は宝箱
-          this.objectLayer.putTileAt(
-            this.getTileIndexForType('tile_snow'), // 例として雪のタイルを使用
-            x, y
-          );
+        }
+      } else {
+        // 通常モードではアセットパイプラインから取得
+        for (const key of tilesetKeys) {
+          if (this.scene.textures.exists(key)) {
+            try {
+              const tileset = this.map.addTilesetImage(key, key, this.tileSize, this.tileSize);
+              if (tileset) {
+                tilesets[key] = tileset;
+              }
+            } catch (e) {
+              console.warn(`Failed to add tileset ${key}: ${e.message}`);
+            }
+          }
         }
       }
-    }
-    
-    // 衝突判定の設定
-    if (this.scene.physics && this.scene.physics.world) {
-      this.scene.physics.world.setBounds(0, 0, this.width * this.tileSize, this.height * this.tileSize);
-      this.scene.physics.world.enable(this.objectLayer);
-      this.objectLayer.setCollisionByExclusion([-1]); // -1は空タイル
+      
+      // tilesetが一つも作成できなかった場合のフォールバック
+      if (Object.keys(tilesets).length === 0) {
+        console.warn('No tilesets created, using fallback tileset');
+        
+        // フォールバックタイルセットの作成
+        const fallbackKey = 'fallback_tile';
+        this.scene.textures.createCanvas(fallbackKey, this.tileSize, this.tileSize);
+        const ctx = this.scene.textures.getCanvas(fallbackKey).getContext('2d');
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, 0, this.tileSize, this.tileSize);
+        ctx.strokeStyle = '#000000';
+        ctx.strokeRect(0, 0, this.tileSize, this.tileSize);
+        this.scene.textures.refresh(fallbackKey);
+        
+        try {
+          const fallbackTileset = this.map.addTilesetImage(fallbackKey, fallbackKey, this.tileSize, this.tileSize);
+          tilesets[fallbackKey] = fallbackTileset;
+        } catch (e) {
+          console.error('Failed to create fallback tileset:', e);
+          return this;
+        }
+      }
+      
+      // レイヤーの作成
+      this.groundLayer = this.map.createBlankLayer('ground', Object.values(tilesets));
+      this.objectLayer = this.map.createBlankLayer('objects', Object.values(tilesets));
+      
+      // タイルセットの取得
+      const getActiveTileset = (textureKey) => {
+        if (tilesets[textureKey]) {
+          return tilesets[textureKey];
+        }
+        // フォールバック
+        return Object.values(tilesets)[0];
+      };
+      
+      // マップデータをもとにタイルを配置
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          try {
+            // 高さデータに基づくタイルタイプの決定
+            const heightValue = this.mapData.heightMap[y][x];
+            const objectType = this.mapData.objectPlacement[y][x];
+            
+            // 高さ値からテクスチャを選択
+            const tileTextureKey = this.getTextureFromHeight(heightValue);
+            
+            // 地面レイヤーにタイルを配置
+            const groundTileset = getActiveTileset(tileTextureKey);
+            const groundTileIndex = this.getTileIndexForType(tileTextureKey);
+            
+            if (this.groundLayer) {
+              this.groundLayer.putTileAt(groundTileIndex, x, y);
+            }
+            
+            // オブジェクト配置情報に基づく障害物配置
+            if (objectType === 3) { // 3は壁/障害物
+              const wallTextureKey = 'tile_stone';
+              const wallTileset = getActiveTileset(wallTextureKey);
+              const wallTileIndex = this.getTileIndexForType(wallTextureKey);
+              
+              if (this.objectLayer) {
+                this.objectLayer.putTileAt(wallTileIndex, x, y);
+                
+                // 衝突判定を追加
+                const tile = this.objectLayer.getTileAt(x, y);
+                if (tile) {
+                  tile.setCollision(true);
+                }
+              }
+            } else if (objectType === 2) { // 2は宝箱
+              const chestTextureKey = 'tile_snow';
+              const chestTileset = getActiveTileset(chestTextureKey);
+              const chestTileIndex = this.getTileIndexForType(chestTextureKey);
+              
+              if (this.objectLayer) {
+                this.objectLayer.putTileAt(chestTileIndex, x, y);
+              }
+            }
+          } catch (e) {
+            console.warn(`Error placing tile at ${x},${y}: ${e.message}`);
+          }
+        }
+      }
+      
+      // 衝突判定の設定
+      if (this.scene.physics && this.scene.physics.world) {
+        this.scene.physics.world.setBounds(0, 0, this.width * this.tileSize, this.height * this.tileSize);
+        this.scene.physics.world.enable(this.objectLayer);
+        this.objectLayer.setCollisionByExclusion([-1]); // -1は空タイル
+      }
+      
+    } catch (e) {
+      console.error('Error creating map:', e);
     }
     
     return this;
@@ -181,10 +328,11 @@ export default class TopDownMap {
       'tile_sand': 3,
       'tile_stone': 4,
       'tile_snow': 5,
-      'tile_lava': 6
+      'tile_lava': 6,
+      'fallback_tile': 0 // フォールバック用
     };
     
-    return typeMap[tileType] || 0;
+    return typeMap[tileType] !== undefined ? typeMap[tileType] : 0;
   }
   
   // オブジェクト（敵、NPC、アイテムなど）の配置
@@ -703,6 +851,7 @@ export default class TopDownMap {
     }
     
     // それでも見つからない場合は(0,0)を返す
+    console.warn('No walkable position found, returning (0,0)');
     return { x: 0, y: 0 };
   }
   

@@ -93,7 +93,7 @@ export default class MainScene {
         this.actionFactory = new ActionFactory(this);
         
         // スキルツリーマネージャーの初期化
-        this.skillTreeManager = new SkillTreeManager();
+        this.skillTreeManager = SkillTreeManager;
 
         // デバッグフラグ
         this.isDebugMode = process.env.NODE_ENV !== 'production';
@@ -290,13 +290,15 @@ export default class MainScene {
           const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
           const playerClass = this.gameData.playerClass || 'warrior';
           
-          // プレイヤーキャラクターの作成
+          // プレイヤーキャラクターの作成 - パラメータを明示的に指定
           this.player = this.characterFactory.createPlayer({
             scene: this,
             x: worldPos.x,
             y: worldPos.y,
             level: playerLevel,
-            classType: playerClass,
+            classType: {
+              name: playerClass || 'warrior' // クラスタイプを明示的にオブジェクトとして渡す
+            },
             name: playerStats.name || 'プレイヤー'
           });
           
@@ -318,6 +320,8 @@ export default class MainScene {
             }
           }
         } catch (error) {
+          console.error('プレイヤー生成エラー:', error);
+          
           if (this.isDebugMode) {
             console.error('プレイヤー生成エラー、ダミーデータを使用します:', error);
             
@@ -328,13 +332,15 @@ export default class MainScene {
             // ダミープレイヤーステータスの生成
             const playerStats = generatePlayerStats('warrior', 5, 'デバッグプレイヤー');
             
-            // プレイヤーキャラクターの作成
+            // プレイヤーキャラクターの作成 - この場合も classType を明示的に指定
             this.player = this.characterFactory.createPlayer({
               scene: this,
               x: worldPos.x,
               y: worldPos.y,
               level: playerStats.level,
-              classType: playerStats.classType,
+              classType: {
+                name: playerStats.classType || 'warrior'
+              },
               name: playerStats.name,
               stats: playerStats
             });

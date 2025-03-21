@@ -27,6 +27,7 @@ const SkillTree = ({ character, onClose }) => {
   const [remainingPoints, setRemainingPoints] = useState(0);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [showTooltip, setShowTooltip] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // スキルツリーデータの読み込み
   useEffect(() => {
@@ -35,7 +36,11 @@ const SkillTree = ({ character, onClose }) => {
 
       try {
         // スキルツリーマネージャーを初期化
-        await skillTreeManager.initialize(character);
+        // 既にシングルトンインスタンスが返されるので、初期化が必要
+        if (!isInitialized) {
+          await skillTreeManager.initialize(character);
+          setIsInitialized(true);
+        }
         
         // スキルツリーグラフデータを取得
         const graphData = skillTreeManager.getSkillTreeGraph(character);
@@ -51,11 +56,11 @@ const SkillTree = ({ character, onClose }) => {
     };
 
     loadSkillTree();
-  }, [character]);
+  }, [character, isInitialized]);
 
   // スキルツリーデータの更新
   const updateSkillTree = useCallback(() => {
-    if (!character) return;
+    if (!character || !isInitialized) return;
     
     // スキルツリーグラフデータを取得
     const graphData = skillTreeManager.getSkillTreeGraph(character);
@@ -65,7 +70,7 @@ const SkillTree = ({ character, onClose }) => {
     // 残りのスキルポイントを取得
     const points = skillTreeManager.getRemainingSkillPoints(character);
     setRemainingPoints(points);
-  }, [character]);
+  }, [character, isInitialized]);
 
   // ノードクリック時の処理
   const onNodeClick = useCallback((event, node) => {
@@ -90,7 +95,7 @@ const SkillTree = ({ character, onClose }) => {
 
   // スキルポイント割り当て処理
   const allocateSkillPoint = useCallback((nodeId) => {
-    if (!character || !nodeId) return;
+    if (!character || !nodeId || !isInitialized) return;
     
     // スキルポイントを割り当て
     const success = skillTreeManager.allocateSkillPoint(nodeId, character);
@@ -102,23 +107,33 @@ const SkillTree = ({ character, onClose }) => {
       // スキルツリー変更イベントを発行
       gameInstance.events.emit('skillTreeChanged', character);
     }
-  }, [character, updateSkillTree]);
+  }, [character, updateSkillTree, isInitialized]);
 
   // スキルポイントリセット処理
   const resetSkillPoints = useCallback(() => {
-    if (!character) return;
+    if (!character || !isInitialized) return;
     
     // スキルポイントをリセット
-    const success = skillTreeManager.playerSkillState.resetSkillPoints();
-    
-    if (success) {
-      // スキルツリーを更新
-      updateSkillTree();
+    // playerSkillStateが存在しており、resetSkillPointsメソッドが実装されていることを確認
+    if (skillTreeManager.playerSkillState && typeof skillTreeManager.playerSkillState.resetSkillPoints === 'function') {
+      const success = skillTreeManager.playerSkillState.resetSkillPoints();
       
-      // スキルツリー変更イベントを発行
-      gameInstance.events.emit('skillTreeChanged', character);
+      if (success) {
+        // スキルツリーを更新
+        updateSkillTree();
+        
+        // スキルツリー変更イベントを発行
+        gameInstance.events.emit('skillTreeChanged', character);
+      }
+    } else {
+      console.warn('resetSkillPoints method is not available');
     }
-  }, [character, updateSkillTree]);
+  }, [character, updateSkillTree, isInitialized]);
+
+  // 初期化状態のチェック
+  if (!isInitialized && character) {
+    return <div className="loading-skill-tree">スキルツリーを読み込み中...</div>;
+  }
 
   return (
     <div className="skill-tree-container" style={{ width: '100%', height: '100%' }}>
@@ -129,7 +144,8 @@ const SkillTree = ({ character, onClose }) => {
           <button 
             className="reset-button" 
             onClick={resetSkillPoints}
-            disabled={skillTreeManager.playerSkillState?.spentSkillPoints <= 0}
+            disabled={!skillTreeManager.playerSkillState || 
+                     (skillTreeManager.playerSkillState?.spentSkillPoints ?? 0) <= 0}
           >
             リセット
           </button>

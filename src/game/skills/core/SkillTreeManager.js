@@ -8,14 +8,39 @@ import ActiveNode from '../nodes/ActiveNode';
  * スキルツリー全体を管理するクラス
  * スキルの読み込み、状態管理、スキルポイントの割り当てなどを担当
  */
-export default class SkillTreeManager {
+class SkillTreeManager {
+  // シングルトンインスタンス
+  static _instance = null;
+  
+  /**
+   * シングルトンインスタンスを取得
+   * @returns {SkillTreeManager} - SkillTreeManagerのインスタンス
+   */
+  static getInstance() {
+    if (!SkillTreeManager._instance) {
+      SkillTreeManager._instance = new SkillTreeManager();
+    }
+    return SkillTreeManager._instance;
+  }
+  
+  /**
+   * コンストラクタ - 直接new演算子での呼び出しは避ける
+   */
   constructor() {
+    // インスタンスが既に存在する場合はそれを返す
+    if (SkillTreeManager._instance) {
+      return SkillTreeManager._instance;
+    }
+    
     this.uuid = uuidv4();
     this.skillLoader = new SkillLoader();
     this.classSkillTrees = new Map(); // 各クラスのスキルツリーデータ
     this.playerSkillState = null;
     this.companionSkillState = null;
     this.isInitialized = false;
+    
+    // このインスタンスをシングルトンインスタンスとして設定
+    SkillTreeManager._instance = this;
   }
 
   /**
@@ -30,9 +55,9 @@ export default class SkillTreeManager {
     await this.loadSkillTrees();
     
     // キャラクタータイプに基づいてスキル状態を初期化
-    if (character.isPlayer) {
+    if (character.isPlayer || character.constructor.name === 'Player') {
       this.playerSkillState = new PlayerSkillState(character, this.classSkillTrees);
-    } else if (character.isCompanion) {
+    } else if (character.isCompanion || character.constructor.name === 'Companion') {
       this.companionSkillState = new PlayerSkillState(character, this.classSkillTrees);
     }
     
@@ -113,7 +138,9 @@ export default class SkillTreeManager {
    */
   allocateSkillPoint(nodeId, character) {
     // プレイヤーかコンパニオンかに基づいて適切な状態管理を取得
-    const skillState = character.isPlayer ? this.playerSkillState : this.companionSkillState;
+    const skillState = character.isPlayer || character.constructor.name === 'Player' 
+      ? this.playerSkillState 
+      : this.companionSkillState;
     
     if (!skillState) {
       console.error('Skill state not initialized for character');
@@ -130,7 +157,9 @@ export default class SkillTreeManager {
    * @returns {Array} - reactflow用のノードとエッジ配列のオブジェクト
    */
   getSkillTreeGraph(character) {
-    const skillState = character.isPlayer ? this.playerSkillState : this.companionSkillState;
+    const skillState = character.isPlayer || character.constructor.name === 'Player' 
+      ? this.playerSkillState 
+      : this.companionSkillState;
     
     if (!skillState) {
       console.error('Skill state not initialized for character');
@@ -147,7 +176,9 @@ export default class SkillTreeManager {
    * @returns {boolean} - スキルを持っているかどうか
    */
   hasSkill(skillId, character) {
-    const skillState = character.isPlayer ? this.playerSkillState : this.companionSkillState;
+    const skillState = character.isPlayer || character.constructor.name === 'Player' 
+      ? this.playerSkillState 
+      : this.companionSkillState;
     
     if (!skillState) return false;
     
@@ -160,7 +191,9 @@ export default class SkillTreeManager {
    * @returns {number} - 残りスキルポイント数
    */
   getRemainingSkillPoints(character) {
-    const skillState = character.isPlayer ? this.playerSkillState : this.companionSkillState;
+    const skillState = character.isPlayer || character.constructor.name === 'Player' 
+      ? this.playerSkillState 
+      : this.companionSkillState;
     
     if (!skillState) return 0;
     
@@ -173,10 +206,62 @@ export default class SkillTreeManager {
    * @param {number} points - 追加するポイント数
    */
   addSkillPoints(character, points = 1) {
-    const skillState = character.isPlayer ? this.playerSkillState : this.companionSkillState;
+    const skillState = character.isPlayer || character.constructor.name === 'Player' 
+      ? this.playerSkillState 
+      : this.companionSkillState;
     
     if (!skillState) return;
     
     skillState.addSkillPoints(points);
   }
+
+  /**
+   * キャラクターがアンロックしているスキルのリストを取得
+   * @param {Object} character - キャラクターオブジェクト
+   * @returns {Array} - アンロックされているスキルの配列
+   */
+  getUnlockedSkills(character) {
+    const skillState = character.isPlayer || character.constructor.name === 'Player'
+      ? this.playerSkillState 
+      : this.companionSkillState;
+    
+    if (!skillState) {
+      console.warn('Skill state not initialized for character, returning empty skill list');
+      return [];
+    }
+    
+    // PlayerSkillStateから解放済みスキルを取得
+    // スキルIDの配列を取得
+    const unlockedSkillIds = skillState.getUnlockedSkillIds();
+    
+    // スキルIDからスキルオブジェクトの配列に変換
+    const unlockedSkills = [];
+    
+    for (const skillId of unlockedSkillIds) {
+      // 全スキルツリーから該当スキルを検索
+      for (const [classType, treeData] of this.classSkillTrees.entries()) {
+        const node = treeData.nodes.get(skillId);
+        if (node && (node.type === 'skill' || node.type === 'active')) {
+          // スキルオブジェクトをリストに追加
+          unlockedSkills.push({
+            id: node.id,
+            name: node.name,
+            description: node.description,
+            icon: node.icon,
+            manaCost: node.manaCost || 0,
+            cooldown: node.cooldown || 0,
+            type: node.type,
+            actionId: node.actionId || node.id,
+            lastUsed: 0
+          });
+          break;
+        }
+      }
+    }
+    
+    return unlockedSkills;
+  }
 }
+
+// デフォルトエクスポートはシングルトンインスタンスを返す
+export default SkillTreeManager.getInstance();

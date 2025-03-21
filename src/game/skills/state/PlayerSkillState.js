@@ -1,309 +1,255 @@
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * プレイヤーのスキル状態を管理するクラス
+ * キャラクターのスキルツリー状態を管理するクラス
  */
-class PlayerSkillState {
+export default class PlayerSkillState {
   /**
-   * コンストラクタ
+   * PlayerSkillStateのコンストラクタ
    * @param {Object} character - キャラクターオブジェクト
-   * @param {Map<string, Object>} classSkillTrees - クラス別スキルツリーデータ
+   * @param {Map} classSkillTrees - クラス別スキルツリーデータのマップ
    */
   constructor(character, classSkillTrees) {
     this.uuid = uuidv4();
-    this.character = character;
+    this.characterId = character.uuid;
+    this.classType = character.classType?.name?.toLowerCase() || 'warrior';
+    this.remainingPoints = character.skillPoints || 0;
+    
+    // スキルツリーデータの参照
     this.classSkillTrees = classSkillTrees;
-    this.characterClass = character.ClassType?.name || 'warrior'; // デフォルトはwarrior
     
-    // スキルポイント
-    this.totalSkillPoints = 0;
-    this.spentSkillPoints = 0;
+    // 解放済みスキルIDの集合
+    this.unlockedSkills = new Set();
     
-    // 解放済みノード
-    this.unlockedNodes = new Map();
-    
-    // 利用可能ノード（解放可能だが未解放）
-    this.availableNodes = new Set();
-    
-    // 初期化
-    this._initializeState();
+    // プレイヤーが持っている既存スキルを初期化
+    this._initializeExistingSkills(character);
   }
-
+  
   /**
-   * スキル状態を初期化
+   * 既存のスキルを初期化
+   * @param {Object} character - キャラクターオブジェクト
    * @private
    */
-  _initializeState() {
-    // 初期スキルポイントを計算（レベルに基づく）
-    this.totalSkillPoints = Math.max(0, this.character.Level - 1);
-    
-    // キャラクタークラスに基づいて適切なスキルツリーを取得
-    this.skillTree = this._getSkillTreeForClass(this.characterClass);
-    
-    if (!this.skillTree) {
-      console.error(`No skill tree found for class: ${this.characterClass}`);
-      return;
+  _initializeExistingSkills(character) {
+    // キャラクターがすでに持っているスキルを解放済みとしてマーク
+    if (character.skills && Array.isArray(character.skills)) {
+      character.skills.forEach(skill => {
+        if (skill.id) {
+          this.unlockedSkills.add(skill.id);
+        } else if (skill.type) {
+          // IDがない場合はtypeを使用（バックワードコンパチビリティ）
+          this.unlockedSkills.add(skill.type);
+        }
+      });
     }
     
-    // ルートノードを解放
-    const rootNodes = this._getRootNodes();
-    for (const rootNode of rootNodes) {
-      this.unlockedNodes.set(rootNode.id, true);
-    }
-    
-    // 利用可能ノードを更新
-    this._updateAvailableNodes();
+    // ルートノードは最初から解放
+    this._unlockRootNodes();
   }
-
+  
   /**
-   * キャラクタークラスに基づいて適切なスキルツリーを取得
-   * @param {string} className - キャラクタークラス名
-   * @returns {Object|null} - スキルツリーデータ
+   * ルートノードを解放する
    * @private
    */
-  _getSkillTreeForClass(className) {
-    // クラス固有のスキルツリーを取得
-    const classTree = this.classSkillTrees.get(className.toLowerCase());
-    
-    // 共通スキルツリーを取得
-    const commonTree = this.classSkillTrees.get('common');
-    
-    // クラス固有ツリーがない場合は共通ツリーのみを返す
-    if (!classTree) return commonTree;
-    
-    // 共通ツリーがない場合はクラス固有ツリーのみを返す
-    if (!commonTree) return classTree;
-    
-    // クラス固有ツリーと共通ツリーをマージ
-    return {
-      metadata: classTree.metadata,
-      nodes: new Map([...classTree.nodes.entries(), ...commonTree.nodes.entries()])
-    };
-  }
-
-  /**
-   * ルートノードを取得
-   * @returns {Array} - ルートノードの配列
-   * @private
-   */
-  _getRootNodes() {
-    const rootNodes = [];
-    
-    for (const [id, node] of this.skillTree.nodes.entries()) {
-      if (node.type === 'root') {
-        rootNodes.push(node);
-      }
-    }
-    
-    return rootNodes;
-  }
-
-  /**
-   * 利用可能なノードを更新
-   * @private
-   */
-  _updateAvailableNodes() {
-    this.availableNodes.clear();
-    
-    for (const [id, node] of this.skillTree.nodes.entries()) {
-      // 既に解放されている場合はスキップ
-      if (this.unlockedNodes.has(id)) continue;
-      
-      // 利用可能かチェック
-      const isAvailable = node.checkAvailability(this.unlockedNodes, this.character.Level);
-      
-      if (isAvailable) {
-        this.availableNodes.add(id);
+  _unlockRootNodes() {
+    // すべてのクラスのルートノードを解放
+    for (const [classType, treeData] of this.classSkillTrees.entries()) {
+      for (const [nodeId, node] of treeData.nodes.entries()) {
+        if (node.type === 'root') {
+          this.unlockedSkills.add(nodeId);
+        }
       }
     }
   }
-
+  
   /**
-   * スキルポイントを割り当てる
+   * 指定したスキルノードにスキルポイントを割り当てる
    * @param {string} nodeId - スキルノードのID
    * @returns {boolean} - 割り当て成功したかどうか
    */
   allocatePoint(nodeId) {
-    // ノードが存在するか確認
-    if (!this.skillTree.nodes.has(nodeId)) {
-      console.error(`Skill node not found: ${nodeId}`);
+    // スキルポイントがあるか確認
+    if (this.remainingPoints <= 0) {
+      console.warn('No skill points remaining');
       return false;
     }
     
-    const node = this.skillTree.nodes.get(nodeId);
-    
-    // ノードが利用可能か確認
-    if (!this.availableNodes.has(nodeId)) {
-      console.warn(`Skill node is not available: ${nodeId}`);
+    // すでに解放済みかどうか確認
+    if (this.unlockedSkills.has(nodeId)) {
+      console.warn(`Skill ${nodeId} is already unlocked`);
       return false;
     }
     
-    // 十分なスキルポイントがあるか確認
-    const remainingPoints = this.totalSkillPoints - this.spentSkillPoints;
-    if (remainingPoints < node.requiredPoints) {
-      console.warn(`Not enough skill points: ${remainingPoints}/${node.requiredPoints}`);
-      return false;
-    }
+    // ノードを見つける
+    let targetNode = null;
+    let parentTreeData = null;
     
-    // アクティブスキルノードの場合、ActionFactoryが必要
-    let actionFactory = null;
-    if (node.type === 'skill') {
-      // ActionFactoryを動的にインポート
-      try {
-        actionFactory = require('../../factories/ActionFactory').default;
-      } catch (e) {
-        console.error('Failed to import ActionFactory:', e);
+    for (const [classType, treeData] of this.classSkillTrees.entries()) {
+      const node = treeData.nodes.get(nodeId);
+      if (node) {
+        targetNode = node;
+        parentTreeData = treeData;
+        break;
       }
     }
     
-    // ノードを解放
-    const success = node.unlock(this.character);
+    if (!targetNode) {
+      console.error(`Skill node ${nodeId} not found in any skill tree`);
+      return false;
+    }
     
-    if (success) {
-      // ノードの効果を適用
-      node.applyEffects(this.character, actionFactory);
-      
-      // 解放済みリストに追加
-      this.unlockedNodes.set(nodeId, true);
-      
-      // スキルポイント消費
-      this.spentSkillPoints += node.requiredPoints;
-      
-      // 利用可能ノードを更新
-      this._updateAvailableNodes();
-      
-      console.log(`Allocated skill point to ${node.name}`);
-      return true;
+    // 前提条件（必要レベル）を満たしているか確認
+    // TODO: キャラクターレベルの確認を実装
+    
+    // 前提条件（親ノードの解放）を満たしているか確認
+    const isConnectedToUnlocked = this._isConnectedToUnlocked(nodeId, parentTreeData);
+    if (!isConnectedToUnlocked) {
+      console.warn(`Cannot unlock ${nodeId}: not connected to any unlocked node`);
+      return false;
+    }
+    
+    // スキルを解放
+    this.unlockedSkills.add(nodeId);
+    this.remainingPoints--;
+    
+    console.log(`Skill ${nodeId} unlocked successfully`);
+    return true;
+  }
+  
+  /**
+   * ノードが解放済みノードに接続されているかを確認
+   * @param {string} nodeId - チェックするノードID
+   * @param {Object} treeData - スキルツリーデータ
+   * @returns {boolean} - 接続されているかどうか
+   * @private
+   */
+  _isConnectedToUnlocked(nodeId, treeData) {
+    // ツリー内のすべてのノードをチェック
+    for (const [id, node] of treeData.nodes.entries()) {
+      // このノードが解放済みかつ、対象ノードに接続されているか
+      if (this.unlockedSkills.has(id) && node.connections && node.connections.includes(nodeId)) {
+        return true;
+      }
     }
     
     return false;
   }
-
+  
   /**
-   * スキルポイント割り当てをリセット
-   * @returns {boolean} - リセット成功したかどうか
-   */
-  resetSkillPoints() {
-    // すべての解放済みノードを解放解除（ルートノードを除く）
-    for (const [id, isUnlocked] of this.unlockedNodes.entries()) {
-      if (isUnlocked) {
-        const node = this.skillTree.nodes.get(id);
-        
-        // ルートノードはスキップ
-        if (node.type === 'root') continue;
-        
-        // ノードの効果を解除
-        node.removeEffects(this.character);
-      }
-    }
-    
-    // 解放済みノードをリセット（ルートノードのみ残す）
-    const newUnlockedNodes = new Map();
-    for (const [id, node] of this.skillTree.nodes.entries()) {
-      if (node.type === 'root') {
-        newUnlockedNodes.set(id, true);
-      }
-    }
-    
-    this.unlockedNodes = newUnlockedNodes;
-    this.spentSkillPoints = 0;
-    
-    // 利用可能ノードを更新
-    this._updateAvailableNodes();
-    
-    return true;
-  }
-
-  /**
-   * スキルポイントを追加
-   * @param {number} points - 追加するポイント数
-   */
-  addSkillPoints(points = 1) {
-    if (points <= 0) return;
-    
-    this.totalSkillPoints += points;
-    console.log(`Added ${points} skill points. Total: ${this.totalSkillPoints}`);
-    
-    // 利用可能ノードを更新
-    this._updateAvailableNodes();
-  }
-
-  /**
-   * 残りのスキルポイント数を取得
-   * @returns {number} - 残りのスキルポイント数
-   */
-  getRemainingPoints() {
-    return this.totalSkillPoints - this.spentSkillPoints;
-  }
-
-  /**
-   * スキルツリーグラフデータを取得（reactflow用）
+   * ReactFlow用のグラフデータを生成
    * @returns {Object} - ノードとエッジの配列
    */
   getGraphData() {
     const nodes = [];
     const edges = [];
     
-    // ノードデータの作成
-    for (const [id, node] of this.skillTree.nodes.entries()) {
-      const isUnlocked = this.unlockedNodes.has(id);
-      const isAvailable = this.availableNodes.has(id);
-      
-      nodes.push(node.getNodeData(isUnlocked, isAvailable));
-    }
+    // 自分のクラスと共通のスキルツリーを結合
+    const relevantTrees = ['common', this.classType];
     
-    // エッジデータの作成
-    for (const [id, node] of this.skillTree.nodes.entries()) {
-      if (node.connections && node.connections.length > 0) {
-        for (const targetId of node.connections) {
-          edges.push({
-            id: `e-${id}-${targetId}`,
-            source: id,
-            target: targetId,
-            // どちらかのノードが解放済みの場合は接続を活性化
-            animated: this.unlockedNodes.has(id) || this.unlockedNodes.has(targetId),
-            style: {
-              stroke: this.unlockedNodes.has(id) && this.unlockedNodes.has(targetId) 
-                ? '#00ff00' // 両方解放済み
-                : this.unlockedNodes.has(id) || this.unlockedNodes.has(targetId)
-                  ? '#ffcc00' // 片方解放済み
-                  : '#999999' // 両方未解放
+    for (const treeType of relevantTrees) {
+      if (!this.classSkillTrees.has(treeType)) continue;
+      
+      const treeData = this.classSkillTrees.get(treeType);
+      
+      // ノードの追加
+      for (const [nodeId, node] of treeData.nodes.entries()) {
+        const unlocked = this.unlockedSkills.has(nodeId);
+        
+        // ノードデータの作成
+        let nodeData;
+        if (typeof node.getNodeData === 'function') {
+          // カスタムノードクラスの場合
+          const isAvailable = !unlocked && this._checkNodeAvailability(nodeId, treeData);
+          nodeData = node.getNodeData(unlocked, isAvailable);
+        } else {
+          // 通常のJSONオブジェクトの場合
+          nodeData = {
+            id: nodeId,
+            type: 'skillNode',
+            position: node.position || { x: 0, y: 0 },
+            data: {
+              ...node,
+              isUnlocked: unlocked,
+              isAvailable: !unlocked && this._checkNodeAvailability(nodeId, treeData)
             }
-          });
+          };
+        }
+        
+        nodes.push(nodeData);
+        
+        // エッジの追加（接続情報）
+        if (node.connections) {
+          for (const targetId of node.connections) {
+            edges.push({
+              id: `${nodeId}->${targetId}`,
+              source: nodeId,
+              target: targetId,
+              animated: this.unlockedSkills.has(nodeId) && this.unlockedSkills.has(targetId)
+            });
+          }
         }
       }
     }
     
     return { nodes, edges };
   }
-
+  
   /**
-   * 指定したスキルを持っているかを確認
-   * @param {string} skillId - スキルID
-   * @returns {boolean} - スキルを持っているかどうか
+   * ノードが利用可能（解放条件を満たしている）かチェック
+   * @param {string} nodeId - ノードID
+   * @param {Object} treeData - スキルツリーデータ
+   * @returns {boolean} - 利用可能かどうか
+   * @private
    */
-  hasSkill(skillId) {
-    return this.unlockedNodes.has(skillId) && this.unlockedNodes.get(skillId);
-  }
-
-  /**
-   * 解放済みスキルの一覧を取得
-   * @returns {Array} - スキルオブジェクトの配列
-   */
-  getUnlockedSkills() {
-    const unlockedSkills = [];
+  _checkNodeAvailability(nodeId, treeData) {
+    const node = treeData.nodes.get(nodeId);
+    if (!node) return false;
     
-    for (const [id, isUnlocked] of this.unlockedNodes.entries()) {
-      if (isUnlocked) {
-        const node = this.skillTree.nodes.get(id);
-        if (node && node.type !== 'root') {
-          unlockedSkills.push(node);
-        }
+    // ルートノードまたは接続のないノードは常に利用可能
+    if (!node.connections || node.connections.length === 0) {
+      return true;
+    }
+    
+    // 接続元の少なくとも1つが解放済みかチェック
+    for (const [id, connectedNode] of treeData.nodes.entries()) {
+      if (connectedNode.connections && connectedNode.connections.includes(nodeId) && this.unlockedSkills.has(id)) {
+        return true;
       }
     }
     
-    return unlockedSkills;
+    return false;
+  }
+  
+  /**
+   * 指定したスキルが解放されているかをチェック
+   * @param {string} skillId - スキルID
+   * @returns {boolean} - 解放されているかどうか
+   */
+  hasSkill(skillId) {
+    return this.unlockedSkills.has(skillId);
+  }
+  
+  /**
+   * 残りスキルポイント数を取得
+   * @returns {number} - 残りスキルポイント数
+   */
+  getRemainingPoints() {
+    return this.remainingPoints;
+  }
+  
+  /**
+   * スキルポイントを追加
+   * @param {number} points - 追加するポイント数
+   */
+  addSkillPoints(points) {
+    this.remainingPoints += points;
+  }
+  
+  /**
+   * 解放済みスキルIDのリストを取得
+   * @returns {Array} - 解放済みスキルIDの配列
+   */
+  getUnlockedSkillIds() {
+    return Array.from(this.unlockedSkills);
   }
 }
-
-export default PlayerSkillState;

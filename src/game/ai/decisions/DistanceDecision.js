@@ -116,6 +116,12 @@ class DistanceDecision {
    * @returns {number} 位置間の距離
    */
   calculateDistance(pos1, pos2) {
+    // 位置が存在するかチェック
+    if (!pos1 || !pos2 || pos1.x === undefined || pos1.y === undefined || pos2.x === undefined || pos2.y === undefined) {
+      console.warn('DistanceDecision: Invalid positions for distance calculation', { pos1, pos2 });
+      return Infinity; // 無効な場合は無限大を返す
+    }
+    
     const dx = pos2.x - pos1.x;
     const dy = pos2.y - pos1.y;
     return Math.sqrt(dx * dx + dy * dy);

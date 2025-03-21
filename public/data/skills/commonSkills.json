@@ -1,0 +1,126 @@
+{
+    "metadata": {
+      "classType": "common",
+      "displayName": "共通スキル",
+      "description": "すべてのクラスが習得できる基本的なスキル"
+    },
+    "nodes": [
+      {
+        "id": "common_root",
+        "type": "root",
+        "position": { "x": 400, "y": 100 },
+        "name": "基本スキル",
+        "description": "共通スキルツリーの始まり",
+        "icon": "common_root.png",
+        "connections": ["common_health_up", "common_mana_up", "common_potion_mastery"]
+      },
+      {
+        "id": "common_health_up",
+        "type": "passive",
+        "position": { "x": 300, "y": 200 },
+        "name": "生命力増強",
+        "description": "最大HPを10%増加させる",
+        "icon": "health_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "MaxLife",
+            "value": 10,
+            "isPercentage": true
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["common_health_regen"]
+      },
+      {
+        "id": "common_health_regen",
+        "type": "passive",
+        "position": { "x": 300, "y": 300 },
+        "name": "生命力回復",
+        "description": "HP自然回復速度を0.5%/秒増加させる",
+        "icon": "health_regen.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "lifeRegeneration",
+            "value": 0.5
+          }
+        ],
+        "requiredLevel": 5,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "common_mana_up",
+        "type": "passive",
+        "position": { "x": 500, "y": 200 },
+        "name": "魔力増強",
+        "description": "最大MPを10%増加させる",
+        "icon": "mana_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "MaxMana",
+            "value": 10,
+            "isPercentage": true
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["common_mana_regen"]
+      },
+      {
+        "id": "common_mana_regen",
+        "type": "passive",
+        "position": { "x": 500, "y": 300 },
+        "name": "魔力回復",
+        "description": "MP自然回復速度を0.5%/秒増加させる",
+        "icon": "mana_regen.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "manaRegeneration",
+            "value": 0.5
+          }
+        ],
+        "requiredLevel": 5,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "common_potion_mastery",
+        "type": "passive",
+        "position": { "x": 400, "y": 200 },
+        "name": "ポーション活用",
+        "description": "ポーションの回復効果を20%増加させる",
+        "icon": "potion_mastery.png",
+        "effects": [
+          {
+            "type": "potionEfficiency",
+            "value": 20
+          }
+        ],
+        "requiredLevel": 3,
+        "requiredPoints": 1,
+        "connections": ["common_max_potion"]
+      },
+      {
+        "id": "common_max_potion",
+        "type": "passive",
+        "position": { "x": 400, "y": 300 },
+        "name": "ポーション拡張",
+        "description": "最大ポーション所持数を2増加させる",
+        "icon": "max_potion.png",
+        "effects": [
+          {
+            "type": "maxPotionIncrease",
+            "value": 2
+          }
+        ],
+        "requiredLevel": 6,
+        "requiredPoints": 1,
+        "connections": []
+      }
+    ]
+  }

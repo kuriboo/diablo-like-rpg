@@ -1,0 +1,128 @@
+{
+    "metadata": {
+      "classType": "mage",
+      "displayName": "魔法使い",
+      "description": "魔法攻撃と元素のスペシャリスト"
+    },
+    "nodes": [
+      {
+        "id": "mage_root",
+        "type": "root",
+        "position": { "x": 400, "y": 100 },
+        "name": "魔法使いの道",
+        "description": "魔法使いのスキルツリーの始まり",
+        "icon": "mage_root.png",
+        "connections": ["mage_int_1", "mage_fireball", "mage_frost_nova"]
+      },
+      {
+        "id": "mage_int_1",
+        "type": "passive",
+        "position": { "x": 300, "y": 200 },
+        "name": "魔力強化 I",
+        "description": "知性を3ポイント増加させる",
+        "icon": "intelligence_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Intelligence",
+            "value": 3
+          }
+        ],
+        "requiredLevel": 2,
+        "requiredPoints": 1,
+        "connections": ["mage_int_2"]
+      },
+      {
+        "id": "mage_int_2",
+        "type": "passive",
+        "position": { "x": 300, "y": 300 },
+        "name": "魔力強化 II",
+        "description": "知性をさらに5ポイント増加させる",
+        "icon": "intelligence_up.png",
+        "effects": [
+          {
+            "type": "attributeModifier",
+            "attribute": "Intelligence",
+            "value": 5
+          }
+        ],
+        "requiredLevel": 5,
+        "requiredPoints": 1,
+        "connections": ["mage_mana_shield"]
+      },
+      {
+        "id": "mage_mana_shield",
+        "type": "passive",
+        "position": { "x": 300, "y": 400 },
+        "name": "マナシールド",
+        "description": "受けるダメージの30%をマナで軽減する",
+        "icon": "mana_shield.png",
+        "effects": [
+          {
+            "type": "specialEffect",
+            "effectType": "manaShield",
+            "value": 30
+          }
+        ],
+        "requiredLevel": 8,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "mage_fireball",
+        "type": "skill",
+        "position": { "x": 400, "y": 200 },
+        "name": "ファイアボール",
+        "description": "炎の球を放ち、範囲ダメージを与える",
+        "icon": "fireball.png",
+        "actionId": "special_fireball",
+        "manaCost": 15,
+        "cooldown": 8,
+        "requiredLevel": 3,
+        "requiredPoints": 1,
+        "connections": ["mage_meteor"]
+      },
+      {
+        "id": "mage_meteor",
+        "type": "skill",
+        "position": { "x": 400, "y": 300 },
+        "name": "メテオ",
+        "description": "指定範囲に巨大な隕石を落とし、強力な範囲ダメージを与える",
+        "icon": "meteor.png",
+        "actionId": "special_meteor",
+        "manaCost": 30,
+        "cooldown": 25,
+        "requiredLevel": 7,
+        "requiredPoints": 1,
+        "connections": []
+      },
+      {
+        "id": "mage_frost_nova",
+        "type": "skill",
+        "position": { "x": 500, "y": 200 },
+        "name": "フロストノヴァ",
+        "description": "周囲に氷の波動を放ち、敵の移動速度を低下させる",
+        "icon": "frost_nova.png",
+        "actionId": "special_frost_nova",
+        "manaCost": 18,
+        "cooldown": 12,
+        "requiredLevel": 4,
+        "requiredPoints": 1,
+        "connections": ["mage_lightning_bolt"]
+      },
+      {
+        "id": "mage_lightning_bolt",
+        "type": "skill",
+        "position": { "x": 500, "y": 300 },
+        "name": "ライトニングボルト",
+        "description": "雷の矢を放ち、複数の敵に連鎖ダメージを与える",
+        "icon": "lightning_bolt.png",
+        "actionId": "special_lightning_bolt",
+        "manaCost": 22,
+        "cooldown": 15,
+        "requiredLevel": 6,
+        "requiredPoints": 1,
+        "connections": []
+      }
+    ]
+  }

@@ -77,9 +77,11 @@ export default class Player extends Character {
     
     // スキル
     this.skills = this.playerStats.skills?.length > 0 ? [...this.playerStats.skills] : [];
+
     
     // その他のデータ
     console.log('Loaded player data from PlayerStats');
+
   }
   
   /**
@@ -236,8 +238,15 @@ export default class Player extends Character {
       ]
     };
     
-    // クラスに応じた初期スキルを設定
-    const classSkills = initialSkills[this.classType.name/*.toLowerCase()*/] || initialSkills.warrior;
+    // クラスに応じた初期スキルを設定 - Add safety check for this.classType
+    let defaultClass = 'warrior';
+    let classType = defaultClass;
+    
+    if (this.classType && this.classType.name) {
+      classType = this.classType.name.toLowerCase();
+    }
+    
+    const classSkills = initialSkills[classType] || initialSkills[defaultClass];
     
     this.skills = classSkills.map(skill => ({
       ...skill,
