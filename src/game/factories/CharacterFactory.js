@@ -175,33 +175,42 @@ export default class CharacterFactory {
     // 敵テクスチャ - トップダウン用のテクスチャキー命名規則に対応
     const texture = config.texture || `enemy_${enemyType}`;
     
-    // 敵の設定 - トップダウン用のパラメータを追加
+    // 敵の設定
     const enemyConfig = {
-      // 既存設定
+      // 基本情報
       name: config.name || this.generateEnemyName(enemyType),
       level: level,
       enemyType: config.isBoss ? 'boss' : (config.isElite ? 'elite' : 'normal'),
       
-      // トップダウン用の追加設定
-      direction: config.direction || 'down', // 初期方向
-      moveSpeed: config.moveSpeed || 100,    // 移動速度
-      isTopDown: true,                       // トップダウンモードフラグ
+      // トップダウン用の設定
+      direction: config.direction || 'down',
+      moveSpeed: config.moveSpeed || 100,
+      isTopDown: true,
       
-      // ステータス（レベルに応じて調整）
+      // ステータス
       strength: config.strength || 10 + Math.floor(level * 0.8),
       dexterity: config.dexterity || 10 + Math.floor(level * 0.6),
       vitality: config.vitality || 10 + Math.floor(level),
       energy: config.energy || 10 + Math.floor(level * 0.4),
       
+      // AI設定
+      aggroRange: config.aggroRange || 200,
+      leashRange: config.leashRange || 400,
+      attackRange: config.attackRange || 1.5,
+      aggressiveness: config.aggressiveness || 0.7,
+      intelligence: config.intelligence || 0.5,
+      
       // 難易度
       difficulty: config.difficulty || 'normal'
     };
     
+    // ActionSystemが利用可能かチェック
+    if (!this.scene.actionSystem) {
+      console.warn('ActionSystem is not available in scene. Enemy AI will have limited functionality.');
+    }
+    
     // 敵の作成
     const enemy = new Enemy(this.scene, x, y, texture, enemyConfig);
-    
-    // トップダウン対応のAI挙動をセットアップ
-    this.setupTopDownEnemyAI(enemy);
     
     // ドロップアイテムの設定
     this.setupEnemyDrops(enemy, enemyConfig);
@@ -209,106 +218,6 @@ export default class CharacterFactory {
     return enemy;
   }
 
-  // トップダウン用敵AIのセットアップ
-  setupTopDownEnemyAI(enemy) {
-    if (!enemy) return;
-    
-    // 既存のアップデート関数を保存
-    const originalUpdate = enemy.update || function(){};
-    
-    // AIの行動範囲（タイル数）
-    const detectionRange = enemy.detectionRange || 7;
-    
-    // 新しいアップデート関数
-    enemy.update = function(time, delta) {
-      // 元のアップデート関数を呼び出し
-      originalUpdate.call(this, time, delta);
-      
-      // 死亡や行動不可の場合は何もしない
-      if (this.isDead || this.isStunned || this.isRooted || this.isPerformingAction) {
-        return;
-      }
-      
-      // プレイヤーの検出
-      const player = this.scene.player;
-      if (!player || player.isDead) return;
-      
-      // プレイヤーとの距離計算
-      const distance = Phaser.Math.Distance.Between(
-        this.x, this.y, player.x, player.y
-      );
-      
-      // タイルサイズを考慮した検出範囲
-      const tileSize = this.scene.topDownMap ? this.scene.topDownMap.tileSize : 32;
-      const detectionDistance = detectionRange * tileSize;
-      
-      // プレイヤーが検出範囲内の場合
-      if (distance <= detectionDistance) {
-        // プレイヤーが攻撃範囲内なら攻撃
-        const attackRange = this.attackRange * tileSize;
-        
-        if (distance <= attackRange) {
-          // 攻撃アクションを作成
-          const attackAction = this.scene.actionFactory.createBasicAction('attack', {
-            owner: this,
-            target: player,
-            scene: this.scene
-          });
-          
-          // 攻撃実行
-          if (attackAction) {
-            attackAction.play();
-          }
-        } 
-        // 攻撃範囲外ならプレイヤーに近づく
-        else {
-          // 移動先を決定
-          const angle = Math.atan2(player.y - this.y, player.x - this.x);
-          const moveSpeed = this.getMoveSpeed ? this.getMoveSpeed() : 100;
-          const normalizedSpeed = moveSpeed * (delta / 1000);
-          
-          // 新しい位置
-          const newX = this.x + Math.cos(angle) * normalizedSpeed;
-          const newY = this.y + Math.sin(angle) * normalizedSpeed;
-          
-          // 移動先が歩行可能かチェック
-          let canMove = true;
-          
-          if (this.scene.topDownMap) {
-            const tilePos = this.scene.topDownMap.worldToTileXY(newX, newY);
-            canMove = this.scene.topDownMap.isWalkableAt(tilePos.x, tilePos.y);
-          }
-          
-          // 移動可能なら位置を更新
-          if (canMove) {
-            this.x = newX;
-            this.y = newY;
-            
-            // 移動に合わせて向きを更新
-            if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
-              this.direction = Math.cos(angle) > 0 ? 'right' : 'left';
-            } else {
-              this.direction = Math.sin(angle) > 0 ? 'down' : 'up';
-            }
-            
-            // 移動アニメーション
-            this.animationState = 'walk';
-            if (this.playAnimation) {
-              this.playAnimation();
-            }
-          }
-        }
-      } 
-      // プレイヤーが範囲外ならアイドル状態
-      else if (this.animationState === 'walk') {
-        this.animationState = 'idle';
-        if (this.playAnimation) {
-          this.playAnimation();
-        }
-      }
-    };
-  }
-  
   // コンパニオン作成
   createCompanion(config = {}) {
     // コンパニオンの位置

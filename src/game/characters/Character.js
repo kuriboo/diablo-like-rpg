@@ -111,14 +111,31 @@ export default class Character {
     this.sprite.setOrigin(0.5, 0.5);
     this.sprite.setInteractive();
     this.sprite.setScale(1);
-    
-    // 衝突領域の設定
+
+    // 衝突領域の設定 - 修正版
     scene.physics.world.enable(this.sprite);
     this.body = this.sprite.body;
     this.body.setCollideWorldBounds(true);
-    this.body.setSize(32, 32);
-    this.body.setOffset(16, 32);
-    
+
+    // スプライト画像のサイズを取得（通常は64x64などの値）
+    const spriteWidth = this.sprite.width;
+    const spriteHeight = this.sprite.height;
+
+    // キャラクターの衝突領域を設定（足元中心にするために高さを調整）
+    const bodyWidth = spriteWidth * 0.7;  // スプライト幅の70%を使用
+    const bodyHeight = spriteHeight * 0.5; // スプライト高さの50%を使用（足元部分）
+
+    // ボディサイズを設定
+    this.body.setSize(bodyWidth, bodyHeight);
+
+    // オフセットを計算（スプライトの中心と物理ボディの中心を一致させる）
+    // 横方向は中央揃え、縦方向は足元部分に配置
+    const offsetX = (spriteWidth - bodyWidth) / 2;
+    const offsetY = spriteHeight - bodyHeight;
+
+    // オフセットを設定
+    this.body.setOffset(offsetX, offsetY);
+
     // ヘルスバー
     this.healthBar = this.createHealthBar();
     
@@ -129,6 +146,9 @@ export default class Character {
     
     // 更新処理
     scene.events.on('update', this.update, this);
+
+    // デバッグ用に現在の設定を出力
+    console.log(`Character body setup: sprite(${spriteWidth}x${spriteHeight}), body(${bodyWidth}x${bodyHeight}), offset(${offsetX},${offsetY})`);
   }
   
   // 位置プロパティのゲッターとセッター

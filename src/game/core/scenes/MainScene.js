@@ -124,7 +124,7 @@ export default class MainScene {
        * デバッグ用のアセットをロード
        */
       loadDebugAssets() {
-        // プレースホルダーアセットの使用
+        // プレースホルダーアセットの使用y
         const placeholders = PlaceholderAssets.placeholders;
         
         // 必要な画像をロード（存在するかチェックして）
@@ -238,8 +238,8 @@ export default class MainScene {
         
         // マップジェネレーターの作成（そのまま）
         this.mapGenerator = new MapGenerator({
-          width: 50,
-          height: 50,
+          width: 80,
+          height: 80,
           seed: Date.now(),
           difficultyLevel: this.gameData.difficulty
         });
@@ -266,11 +266,7 @@ export default class MainScene {
         
         // UIシーンの開始
         this.scene.launch('UIScene', { mainScene: this });
-        const uiScene = this.scene.get('UIScene');
-        if (uiScene && uiScene.resetMenuState) {
-          uiScene.resetMenuState();
-        }
-        
+
         // イベントリスナーの設定
         this.setupEventListeners();
         
@@ -290,6 +286,39 @@ export default class MainScene {
          // デバッグモードの初期化
         if (this.isDebugMode) {
           Debug.initialize(this);
+
+          // 物理ボディのデバッグ表示を有効化
+          this.physics.world.createDebugGraphic();
+
+          // プレイヤーの衝突領域を視覚化
+          if (this.player && this.player.sprite && this.player.body) {
+            const debugGraphics = this.add.graphics();
+            debugGraphics.lineStyle(2, 0xff0000);
+            
+            this.events.on('update', () => {
+              if (!this.player || !this.player.sprite || !this.player.body) return;
+              
+              debugGraphics.clear();
+              
+              // スプライトの境界を緑色で表示
+              debugGraphics.lineStyle(1, 0x00ff00);
+              debugGraphics.strokeRect(
+                this.player.x - this.player.sprite.width / 2, 
+                this.player.y - this.player.sprite.height / 2,
+                this.player.sprite.width,
+                this.player.sprite.height
+              );
+              
+              // 物理ボディの境界を赤色で表示
+              debugGraphics.lineStyle(2, 0xff0000);
+              debugGraphics.strokeRect(
+                this.player.x - this.player.sprite.width / 2 + this.player.body.offset.x,
+                this.player.y - this.player.sprite.height / 2 + this.player.body.offset.y,
+                this.player.body.width,
+                this.player.body.height
+              );
+            });
+          }
           
           // 追加敵の生成（デバッグ用）
           this.createDebugEnemies();
@@ -453,9 +482,6 @@ export default class MainScene {
           // TopDownでは単純なシーンのdepthプロパティで重なり順を制御
           this.player.setDepth(10); // キャラクターの深度を設定
           
-          // プレイヤーに基本アクションを設定
-          this.setupPlayerActions();
-          
           // プレイヤー作成イベント
           this.events.emit('player-created', this.player);
           
@@ -499,43 +525,11 @@ export default class MainScene {
             // 以下は通常の処理と同様...
             this.add.existing(this.player);
             this.player.setDepth(10);
-            this.setupPlayerActions();
             this.events.emit('player-created', this.player);
           } else {
             throw error; // 本番環境ではエラーを伝播
           }
         }
-      }
-      
-      /**
-       * プレイヤーの基本アクションを設定
-       */
-      setupPlayerActions() {
-        if (!this.player || !this.actionSystem) return;
-        
-        // プレイヤーの基本アクションを設定
-        const basicActions = {
-          move: this.actionSystem.createAction('move', {
-            owner: this.player,
-            topDownMap: this.topDownMap
-          }),
-          
-          attack: this.actionSystem.createAction('attack', {
-            owner: this.player,
-            attackRange: this.player.attackRange || 60,
-            attackCooldown: 800
-          }),
-          
-          idle: this.actionSystem.createAction('idle', {
-            owner: this.player,
-            duration: 1000
-          })
-        };
-        
-        // プレイヤーにアクションを登録
-        this.player.basicActions = basicActions;
-        
-        console.log('プレイヤーアクションを設定しました');
       }
       
       /**
@@ -622,7 +616,7 @@ export default class MainScene {
         
         for (let i = 0; i < enemyCount; i++) {
           // プレイヤーから少し離れた位置を取得
-          const position = this.getRandomPositionAwayFromPlayer(200, 500);
+          const position = this.getRandomPositionAwayFromPlayer(400, 600);
           if (!position) continue;
           
           // 敵のレベルを決定（プレイヤーレベル±2）
@@ -668,13 +662,93 @@ export default class MainScene {
             if (enemy.ai && enemy.ai.setEnabled) {
               enemy.ai.setEnabled(false);
             }
-            
-            // 新しいAIインスタンスの作成（実装済みの場合）
-            // enemy.ai = new EnemyAI(enemy, {}, this.actionSystem);
           }
         }
         
         console.log(`🎮 デバッグ用の敵を ${this.enemies.length} 体生成しました`);
+      }
+
+      /**
+       * スキルツリーシステムの初期化
+       */
+      async initializeSkillTreeSystem() {
+        try {
+          if (!this.player) return;
+          
+          // スキルツリーマネージャーの初期化
+          await this.skillTreeManager.initialize(this.player);
+          
+          // 解放済みスキルの設定（ゲームデータから）
+          if (this.gameData.unlockedSkills) {
+            for (const skillId of this.gameData.unlockedSkills) {
+              this.skillTreeManager.allocateSkillPoint(skillId, this.player);
+            }
+          }
+          
+          // プレイヤーのスキルリスト更新
+          this.updatePlayerSkills();
+          
+          console.log('Skill tree system initialized');
+        } catch (error) {
+          console.error('Failed to initialize skill tree system:', error);
+        }
+      }
+
+      /**
+       * プレイヤースキルの更新
+       */
+      updatePlayerSkills() {
+        if (!this.player || !this.skillTreeManager) return;
+        
+        // 既存のスキルをクリア
+        if (!this.player.specialActions) {
+          this.player.specialActions = new Map();
+        }
+        
+        // 解放済みスキルの取得
+        const unlockedSkills = this.skillTreeManager.getUnlockedSkills(this.player);
+        
+        // スキルアクションの作成と設定
+        for (const skill of unlockedSkills) {
+          if (skill.type === 'skill') {
+            // ActionSystemが使用可能な場合
+            if (this.actionSystem) {
+              // スキルデータを作成
+              const skillData = {
+                skillId: skill.id,
+                name: skill.name,
+                description: skill.description,
+                manaCost: skill.manaCost || 10,
+                cooldown: skill.cooldown || 3000,
+                damage: skill.damage,
+                damageType: skill.damageType || 'physical',
+                range: skill.range || 100,
+                areaOfEffect: skill.areaOfEffect || 0,
+                effectType: skill.effectType,
+                effectValue: skill.effectValue,
+                effectDuration: skill.effectDuration || 0,
+                targetType: skill.targetType || 'enemy'
+              };
+              
+              // スキルデータを登録
+              this.player.specialActions.set(skill.id, skillData);
+            }
+            // 従来の方法
+            else {
+              const skillAction = this.actionFactory.createSpecialAction(skill.id, {
+                owner: this.player,
+                scene: this
+              });
+              
+              if (skillAction) {
+                this.player.specialActions.set(skill.id, skillAction);
+              }
+            }
+          }
+        }
+        
+        // スキル更新イベント
+        this.events.emit('skills-updated', this.player.specialActions);
       }
       
       /**
@@ -739,88 +813,22 @@ export default class MainScene {
        * イベントリスナーの設定
        */
       setupEventListeners() {
-        // ESCキー：メニュー表示
-        this.input.keyboard.on('keydown-ESC', () => {
-          // メニューを表示
-          const uiScene = this.scene.get('UIScene');
-          if (uiScene) {
-            uiScene.toggleMenu();
-          }
-        });
         
-        // マウスクリック：移動/攻撃
-        this.input.on('pointerdown', (pointer) => {
-          if (this.player && !this.player.isDead) {
-            // 右クリックの場合は移動
-            if (pointer.rightButtonDown()) {
-              this.handlePlayerMovement(pointer);
-            }
-            // 左クリックの場合は攻撃/インタラクション
-            else if (pointer.leftButtonDown()) {
-              this.handlePlayerAction(pointer);
-            }
-          }
-        });
-        
-        // スペースキー：基本攻撃
-        this.input.keyboard.on('keydown-SPACE', () => {
-          if (this.player && !this.player.isDead) {
-            this.performBasicAttack();
-          }
-        });
-        
-        // 1-5キー：スキル使用
-        for (let i = 1; i <= 5; i++) {
-          this.input.keyboard.on(`keydown-${i}`, () => {
-            if (this.player && !this.player.isDead) {
-              this.usePlayerSkill(i - 1);
-            }
-          });
-        }
-        
-        // QWERキー：ポーション使用など
-        this.input.keyboard.on('keydown-Q', () => {
-          if (this.player && !this.player.isDead) {
-            this.useHealthPotion();
-          }
-        });
-        
-        this.input.keyboard.on('keydown-E', () => {
-          if (this.player && !this.player.isDead) {
-            this.useManaPotion();
-          }
-        });
-        
-        // ミニマップ表示トグル
-        this.input.keyboard.on('keydown-M', () => {
-          const uiScene = this.scene.get('UIScene');
-          if (uiScene && uiScene.toggleMinimap) {
-            uiScene.toggleMinimap();
-          }
-        });
-        
-        // スキルツリー表示
-        this.input.keyboard.on('keydown-T', () => {
-          this.showSkillTree();
-        });
-        
-        // マップ生成用テストキー（デバッグ用）
-        if (this.game.config.physics.arcade?.debug) {
+        // デバッグモード専用キー
+        if (this.isDebugMode) {
+
+          // マップ生成用テストキー（デバッグ用）
           this.input.keyboard.on('keydown-R', async () => {
             await this.generateMap();
             
             // プレイヤーの位置をリセット
             const startPosition = this.topDownMap.getRandomWalkablePosition();
             const worldPos = this.topDownMap.tileToWorldXY(startPosition.x, startPosition.y);
-            this.player.x(worldPos.x);
-            this.player.y(worldPos.y);
+            this.player.x=worldPos.x;
+            this.player.y=worldPos.y;
             
             console.log('Map regenerated');
           });
-        }
-
-        // デバッグモード専用キー
-        if (this.isDebugMode) {
 
           // MainScene.js setupEventListeners()メソッドにF1キーのイベント追加
           this.input.keyboard.on('keydown-F1', () => {
@@ -937,181 +945,6 @@ export default class MainScene {
           });
         }
       }
-      
-      /**
-       * プレイヤー移動処理
-       */
-      handlePlayerMovement(pointer) {
-        // クリック位置を取得
-        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        
-        // トップダウン座標に変換
-        const tileXY = this.topDownMap.worldToTileXY(worldPoint.x, worldPoint.y);
-        
-        // 移動可能かチェック
-        if (this.topDownMap.isWalkableAt(tileXY.x, tileXY.y)) {
-          // プレイヤーの現在位置をタイル座標で取得
-          const playerTileXY = this.topDownMap.worldToTileXY(this.player.x, this.player.y);
-          
-          // 経路を探索
-          const path = this.topDownMap.findPath(
-            playerTileXY.x, playerTileXY.y,
-            tileXY.x, tileXY.y
-          );
-          
-          // 経路が見つかった場合
-          if (path && path.length > 0) {
-            // ActionSystemが使用可能な場合
-            if (this.actionSystem) {
-              // 既存のアクションをキャンセル
-              this.actionSystem.cancelEntityActions(this.player);
-              
-              // パスをワールド座標に変換
-              const worldPath = path.map(p => {
-                const worldPos = this.topDownMap.tileToWorldXY(p.x, p.y);
-                return { x: worldPos.x, y: worldPos.y };
-              });
-              
-              // 移動アクションを作成して実行
-              const moveAction = this.actionSystem.createAction('move', {
-                owner: this.player,
-                path: worldPath,
-                topDownMap: this.topDownMap
-              });
-              
-              this.actionSystem.queueAction(moveAction, true);
-            }
-            // 従来の方法
-            else {
-              this.movePlayerAlongPath(path);
-            }
-          }
-        }
-      }
-      
-      /**
-       * プレイヤーが経路に沿って移動（従来の方法）
-       */
-      movePlayerAlongPath(path) {
-        // 移動アクションを作成
-        const moveAction = this.actionFactory.createBasicAction('move', {
-          owner: this.player,
-          path: path,
-          topDownMap: this.topDownMap
-        });
-        
-        // 移動アクション実行
-        if (moveAction) {
-          moveAction.play();
-        }
-      }
-      
-      /**
-       * プレイヤーアクション処理（攻撃/インタラクション）
-       */
-      handlePlayerAction(pointer) {
-        // クリック位置を取得
-        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-        
-        // トップダウン座標に変換
-        const tileXY = this.topDownMap.worldToTileXY(worldPoint.x, worldPoint.y);
-        
-        // クリック位置にエンティティがあるかチェック
-        const entity = this.topDownMap.getEntityAt(tileXY.x, tileXY.y);
-        
-        if (entity) {
-          // 敵の場合は攻撃
-          if (entity.type === 'enemy' || entity.classType?.name === 'Enemy') {
-            this.attackTarget(entity);
-          }
-          // NPCの場合は会話
-          else if (entity.type === 'npc' || entity.classType?.name === 'NPC') {
-            this.interactWithNPC(entity);
-          }
-          // アイテム/宝箱の場合は取得
-          else if (entity.type === 'item' || entity.type === 'chest') {
-            this.collectItem(entity);
-          }
-        } else {
-          // 何もないところをクリックした場合は基本攻撃
-          this.performBasicAttack();
-        }
-      }
-      
-      /**
-       * ターゲットを攻撃
-       */
-      attackTarget(target) {
-        if (!this.player || !target) return;
-        
-        // ActionSystemが使用可能な場合
-        if (this.actionSystem) {
-          // 既存のアクションをキャンセル
-          this.actionSystem.cancelEntityActions(this.player);
-          
-          // 攻撃アクションを作成して実行
-          const attackAction = this.actionSystem.createAction('attack', {
-            owner: this.player,
-            target: target,
-            attackRange: this.player.attackRange || 60
-          });
-          
-          this.actionSystem.queueAction(attackAction, true);
-        }
-        // 従来の方法
-        else {
-          // 攻撃アクションを作成
-          const attackAction = this.actionFactory.createBasicAction('attack', {
-            owner: this.player,
-            target: target
-          });
-          
-          // 攻撃アクション実行
-          if (attackAction) {
-            attackAction.play();
-          }
-        }
-      }
-      
-      /**
-       * 基本攻撃の実行
-       */
-      performBasicAttack() {
-        if (!this.player) return;
-        
-        // 最も近い敵を探す
-        const nearestEnemy = this.findNearestEnemy();
-        
-        // 敵が見つかった場合は攻撃
-        if (nearestEnemy) {
-          this.attackTarget(nearestEnemy);
-        } else {
-          // ActionSystemが使用可能な場合
-          if (this.actionSystem) {
-            // 既存のアクションをキャンセル
-            this.actionSystem.cancelEntityActions(this.player);
-            
-            // 攻撃アクションを作成して実行（ターゲットなし）
-            const attackAction = this.actionSystem.createAction('attack', {
-              owner: this.player,
-              attackRange: this.player.attackRange || 60
-            });
-            
-            this.actionSystem.queueAction(attackAction, true);
-          }
-          // 従来の方法
-          else {
-            // 敵がいない場合は空振り
-            const attackAction = this.actionFactory.createBasicAction('attack', {
-              owner: this.player
-            });
-            
-            if (attackAction) {
-              attackAction.play();
-            }
-          }
-        }
-      }
 
       /**
        * キャラクターが指定された位置に移動可能かどうかを判定します
@@ -1176,35 +1009,6 @@ export default class MainScene {
       }
       
       /**
-       * 最も近い敵を探す
-       */
-      findNearestEnemy() {
-        if (!this.player || !this.enemies || this.enemies.length === 0) return null;
-        
-        let nearestEnemy = null;
-        let minDistance = Infinity;
-        
-        for (const enemy of this.enemies) {
-          if (enemy && !enemy.isDead) {
-            // getDistance関数を使用
-            const dist = getDistance(
-              this.player.x, this.player.y,
-              enemy.x, enemy.y
-            );
-            
-            if (dist < minDistance) {
-              minDistance = dist;
-              nearestEnemy = enemy;
-            }
-          }
-        }
-        
-        // 一定距離内の敵だけを対象にする
-        const attackRange = this.player.attackRange || 150;
-        return minDistance <= attackRange ? nearestEnemy : null;
-      }
-      
-      /**
        * NPCとのインタラクション
        */
       interactWithNPC(npc) {
@@ -1240,172 +1044,6 @@ export default class MainScene {
         
         // アイテム取得イベント
         this.events.emit('item-collected', item);
-      }
-      
-      /**
-       * プレイヤースキルの使用
-       */
-      usePlayerSkill(skillIndex) {
-        // プレイヤーのスキルリストからスキルを取得
-        if (!this.player || !this.player.specialActions) return;
-        
-        const skillKeys = Array.from(this.player.specialActions.keys());
-        if (skillIndex >= skillKeys.length) return;
-        
-        const skillKey = skillKeys[skillIndex];
-        const skillData = this.player.specialActions.get(skillKey);
-        
-        if (skillData) {
-          // ActionSystemが使用可能な場合
-          if (this.actionSystem) {
-            // 既存のアクションをキャンセル
-            this.actionSystem.cancelEntityActions(this.player);
-            
-            // ターゲットを取得
-            const nearestEnemy = this.findNearestEnemy();
-            
-            // スキルアクションを作成
-            const skillAction = this.actionSystem.createAction('skill', {
-              owner: this.player,
-              target: nearestEnemy,
-              skillId: skillKey,
-              ...skillData // スキルデータをコピー
-            });
-            
-            this.actionSystem.queueAction(skillAction, true);
-          }
-          // 従来の方法
-          else {
-            const skillAction = this.player.specialActions.get(skillKey);
-            
-            if (skillAction) {
-              // スキルのターゲットを設定（必要に応じて）
-              const nearestEnemy = this.findNearestEnemy();
-              if (nearestEnemy) {
-                skillAction.target = nearestEnemy;
-              }
-              
-              // スキル使用
-              skillAction.play();
-            }
-          }
-          
-          // スキル使用イベント
-          this.events.emit('skill-used', { skillKey, skillAction });
-        }
-      }
-      
-      /**
-       * ヘルスポーションの使用
-       */
-      useHealthPotion() {
-        if (!this.player) return;
-        
-        // プレイヤーのポーション使用メソッドを呼び出し
-        const success = this.player.useHealthPotion();
-        
-        if (success) {
-          // ポーション使用イベント
-          this.events.emit('potion-used', 'health');
-        }
-      }
-      
-      /**
-       * マナポーションの使用
-       */
-      useManaPotion() {
-        if (!this.player) return;
-        
-        // プレイヤーのポーション使用メソッドを呼び出し
-        const success = this.player.useManaPotion();
-        
-        if (success) {
-          // ポーション使用イベント
-          this.events.emit('potion-used', 'mana');
-        }
-      }
-      
-      /**
-       * スキルツリーシステムの初期化
-       */
-      async initializeSkillTreeSystem() {
-        try {
-          if (!this.player) return;
-          
-          // スキルツリーマネージャーの初期化
-          await this.skillTreeManager.initialize(this.player);
-          
-          // 解放済みスキルの設定（ゲームデータから）
-          if (this.gameData.unlockedSkills) {
-            for (const skillId of this.gameData.unlockedSkills) {
-              this.skillTreeManager.allocateSkillPoint(skillId, this.player);
-            }
-          }
-          
-          // プレイヤーのスキルリスト更新
-          this.updatePlayerSkills();
-          
-          console.log('Skill tree system initialized');
-        } catch (error) {
-          console.error('Failed to initialize skill tree system:', error);
-        }
-      }
-      
-      /**
-       * プレイヤースキルの更新
-       */
-      updatePlayerSkills() {
-        if (!this.player || !this.skillTreeManager) return;
-        
-        // 既存のスキルをクリア
-        if (!this.player.specialActions) {
-          this.player.specialActions = new Map();
-        }
-        
-        // 解放済みスキルの取得
-        const unlockedSkills = this.skillTreeManager.getUnlockedSkills(this.player);
-        
-        // スキルアクションの作成と設定
-        for (const skill of unlockedSkills) {
-          if (skill.type === 'skill') {
-            // ActionSystemが使用可能な場合
-            if (this.actionSystem) {
-              // スキルデータを作成
-              const skillData = {
-                skillId: skill.id,
-                name: skill.name,
-                description: skill.description,
-                manaCost: skill.manaCost || 10,
-                cooldown: skill.cooldown || 3000,
-                damage: skill.damage,
-                damageType: skill.damageType || 'physical',
-                range: skill.range || 100,
-                areaOfEffect: skill.areaOfEffect || 0,
-                effectType: skill.effectType,
-                effectValue: skill.effectValue,
-                effectDuration: skill.effectDuration || 0,
-                targetType: skill.targetType || 'enemy'
-              };
-              
-              // スキルデータを登録
-              this.player.specialActions.set(skill.id, skillData);
-            }
-            // 従来の方法
-            else {
-              const skillAction = this.actionFactory.createSpecialAction(skill.id, {
-                owner: this.player,
-                scene: this
-              });
-              
-              if (skillAction) {
-                this.player.specialActions.set(skill.id, skillAction);
-              }
-            }
-          }
-        }
-        
-        // スキル更新イベント
-        this.events.emit('skills-updated', this.player.specialActions);
       }
       
       /**

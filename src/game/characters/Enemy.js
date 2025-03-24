@@ -6,24 +6,34 @@ export default class Enemy extends Character {
   constructor(scene, x, y, texture, config = {}) {
     super(scene, x, y, texture, config);
 
-    // AIコントローラの初期化
-    this.aiController = new EnemyAI(this);
+    // ActionSystemを取得
+    this.actionSystem = scene.actionSystem;
+    if (!this.actionSystem) {
+      console.error('Enemy created without ActionSystem - AI functionality will be limited');
+    }
+    
+    // AIコントローラの初期化 - ActionSystemを渡す
+    this.aiController = new EnemyAI(this, {
+      aggressiveness: config.aggressiveness || 0.7,
+      intelligence: config.intelligence || 0.5,
+      perceptionRadius: config.aggroRange || 200,
+      attackRange: config.attackRange || (this.attackRange * 32) || 50,
+      chaseRange: config.leashRange || 400,
+      fleeHealthThreshold: config.fleeHealthThreshold || 0.2,
+      returnHomeRange: config.returnHomeRange || 600
+    }, this.actionSystem);
     
     // ダメージ時のAIコールバック設定
     this.on('damage', this.onDamage.bind(this));
     
     // 敵固有のプロパティ
-    this.aggroRange = config.aggroRange || 200; // アグロ範囲
-    this.leashRange = config.leashRange || 400; // リーシュ範囲（初期位置からこれ以上離れると戻る）
-    this.attackCooldown = config.attackCooldown || 1000; // 攻撃クールダウン
+    this.aggroRange = config.aggroRange || 200; 
+    this.leashRange = config.leashRange || 400;
+    this.attackCooldown = config.attackCooldown || 1000;
     this.lastAttackTime = 0;
     
-    // AI関連
-    this.state = 'idle'; // idle, patrol, chase, attack, retreat, stunned
-    this.patrolPoints = config.patrolPoints || this.generatePatrolPoints();
-    this.currentPatrolIndex = 0;
-    this.patrolWaitTime = 0;
-    this.homePosition = { x, y }; // 初期位置
+    // 元の位置を記録（帰還用）
+    this.homePosition = { x, y };
     
     // ドロップアイテム
     this.dropItemList = config.dropItemList || [];
@@ -42,23 +52,6 @@ export default class Enemy extends Character {
     
     // 難易度に応じた強化
     this.applyDifficultyBuffs(config.difficulty || 'normal');
-  }
-  
-  // パトロールポイントの生成
-  generatePatrolPoints() {
-    const points = [];
-    const range = 100;
-    
-    // 初期位置を中心に4つのポイントを生成
-    for (let i = 0; i < 4; i++) {
-      points.push({
-        x: this.x + getRandomInt(-range, range),
-        y: this.y + getRandomInt(-range, range),
-        waitTime: getRandomInt(1000, 3000)
-      });
-    }
-    
-    return points;
   }
   
   // 経験値の計算
@@ -238,6 +231,11 @@ export default class Enemy extends Character {
   die(killer = null) {
     super.die(killer);
     
+    // AIコントローラを無効化
+    if (this.aiController && this.aiController.setEnabled) {
+      this.aiController.setEnabled(false);
+    }
+    
     // アイテムのドロップ
     this.dropItems();
     
@@ -252,250 +250,13 @@ export default class Enemy extends Character {
     }
   }
   
-  // 更新処理のオーバーライド
+  // 更新処理のオーバーライド - ActionSystemに制御を委譲
   update(time, delta) {
+    // 親クラスの更新処理を呼び出し
     super.update(time, delta);
-
-    // AIコントローラの更新
-    if (this.aiController) {
-      this.aiController.update(time, delta);
-    }
     
-    // 死亡時は処理しない
-    if (this.isDead) return;
-    
-    // 状態に応じた行動
-    switch (this.state) {
-      case 'idle':
-        this.updateIdleState(time, delta);
-        break;
-      case 'patrol':
-        this.updatePatrolState(time, delta);
-        break;
-      case 'chase':
-        this.updateChaseState(time, delta);
-        break;
-      case 'attack':
-        this.updateAttackState(time, delta);
-        break;
-      case 'retreat':
-        this.updateRetreatState(time, delta);
-        break;
-      case 'stunned':
-        this.updateStunnedState(time, delta);
-        break;
-    }
-  }
-  
-  // アイドル状態の更新
-  updateIdleState(time, delta) {
-    // プレイヤーの検出
-    const player = this.scene.player;
-    
-    if (player && !player.isDead) {
-      const distanceToPlayer = getDistance(
-        this.x, this.y, player.x, player.y
-      );
-      
-      // アグロ範囲内ならプレイヤーを追跡
-      if (distanceToPlayer <= this.aggroRange) {
-        this.target = player;
-        this.state = 'chase';
-        return;
-      }
-    }
-    
-    // パトロールに移行（一定確率）
-    if (Math.random() < 0.01) {
-      this.state = 'patrol';
-      this.currentPatrolIndex = 0;
-    }
-  }
-  
-  // パトロール状態の更新
-  updatePatrolState(time, delta) {
-    // プレイヤーの検出
-    const player = this.scene.player;
-    
-    if (player && !player.isDead) {
-      const distanceToPlayer = getDistance(
-        this.x, this.y, player.x, player.y
-      );
-      
-      // アグロ範囲内ならプレイヤーを追跡
-      if (distanceToPlayer <= this.aggroRange) {
-        this.target = player;
-        this.state = 'chase';
-        return;
-      }
-    }
-    
-    // パトロールポイントがない場合はアイドルに戻る
-    if (!this.patrolPoints || this.patrolPoints.length === 0) {
-      this.state = 'idle';
-      return;
-    }
-    
-    // 現在のパトロールポイント
-    const currentPoint = this.patrolPoints[this.currentPatrolIndex];
-    
-    // 待機時間が設定されている場合
-    if (this.patrolWaitTime > 0) {
-      this.patrolWaitTime -= delta;
-      
-      // 待機完了
-      if (this.patrolWaitTime <= 0) {
-        // 次のポイントへ
-        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
-      }
-      
-      return;
-    }
-    
-    // ポイントへの移動
-    const distanceToPoint = getDistance(
-      this.x, this.y, currentPoint.x, currentPoint.y
-    );
-    
-    // ポイントに到着した場合
-    if (distanceToPoint < 10) {
-      // 待機時間を設定
-      this.patrolWaitTime = currentPoint.waitTime || 1000;
-      return;
-    }
-    
-    // ポイントへ移動
-    this.setMoveTarget(currentPoint.x, currentPoint.y);
-  }
-  
-  // 追跡状態の更新
-  updateChaseState(time, delta) {
-    if (!this.target || this.target.isDead) {
-      // ターゲットがいない/死亡している場合はアイドルに戻る
-      this.state = 'idle';
-      this.target = null;
-      return;
-    }
-    
-    // ターゲットとの距離
-    const distanceToTarget = getDistance(
-      this.x, this.y, this.target.x, this.target.y
-    );
-    
-    // 初期位置との距離
-    const distanceToHome = getDistance(
-      this.x, this.y, this.homePosition.x, this.homePosition.y
-    );
-    
-    // リーシュ範囲外ならリトリート
-    if (distanceToHome > this.leashRange) {
-      this.state = 'retreat';
-      return;
-    }
-    
-    // 攻撃範囲内なら攻撃
-    if (distanceToTarget <= this.attackRange * 32) {
-      this.state = 'attack';
-      return;
-    }
-    
-    // ターゲットへ移動
-    this.setMoveTarget(this.target.x, this.target.y);
-  }
-  
-  // 攻撃状態の更新
-  updateAttackState(time, delta) {
-    if (!this.target || this.target.isDead) {
-      // ターゲットがいない/死亡している場合はアイドルに戻る
-      this.state = 'idle';
-      this.target = null;
-      return;
-    }
-    
-    // ターゲットとの距離
-    const distanceToTarget = getDistance(
-      this.x, this.y, this.target.x, this.target.y
-    );
-    
-    // 攻撃範囲外ならチェイスに戻る
-    if (distanceToTarget > this.attackRange * 32) {
-      this.state = 'chase';
-      return;
-    }
-    
-    // 攻撃クールダウンのチェック
-    if (time - this.lastAttackTime >= this.attackCooldown) {
-      // 攻撃実行
-      this.attack(this.target);
-      this.lastAttackTime = time;
-    }
-  }
-  
-  // 撤退状態の更新
-  updateRetreatState(time, delta) {
-    // 初期位置との距離
-    const distanceToHome = getDistance(
-      this.x, this.y, this.homePosition.x, this.homePosition.y
-    );
-    
-    // 初期位置に近づいたらアイドルに戻る
-    if (distanceToHome < 10) {
-      this.state = 'idle';
-      this.target = null;
-      
-      // 体力を回復
-      this.life = this.maxLife;
-      this.updateHealthBar();
-      
-      return;
-    }
-    
-    // 初期位置へ移動
-    this.setMoveTarget(this.homePosition.x, this.homePosition.y);
-  }
-  
-  // スタン状態の更新
-  updateStunnedState(time, delta) {
-    // スタン状態からの回復は別途処理される（Effect.jsなど）
-  }
-  
-  // アグロの取得（他の敵を呼ぶ）
-  alertNearbyEnemies() {
-    if (!this.scene || !this.scene.enemies || !this.target) return;
-    
-    // 近くの敵を探す
-    const alertRange = 150;
-    
-    for (const enemy of this.scene.enemies) {
-      // 自分自身や既にターゲットを持っている敵はスキップ
-      if (enemy === this || enemy.target || enemy.isDead) continue;
-      
-      // 距離チェック
-      const distance = getDistance(
-        this.x, this.y, enemy.x, enemy.y
-      );
-      
-      if (distance <= alertRange) {
-        // 近くの敵にターゲットを共有
-        enemy.target = this.target;
-        enemy.state = 'chase';
-      }
-    }
-  }
-  
-  // 攻撃のオーバーライド
-  attack(target) {
-    // 基本クラスの処理を呼び出し
-    const result = super.attack(target);
-    
-    if (result) {
-      // 攻撃成功時、ランダムで近くの敵に警報
-      if (Math.random() < 0.3) {
-        this.alertNearbyEnemies();
-      }
-    }
-    
-    return result;
+    // AIコントローラはEnemyAI内で定期実行されるので
+    // ここでの手動更新は必要なし
   }
   
   // ダメージ処理のオーバーライド
@@ -503,20 +264,8 @@ export default class Enemy extends Character {
     // 基本クラスの処理を呼び出し
     const finalDamage = super.takeDamage(amount, damageType, isCritical, source);
     
-    // ダメージを受けた場合、攻撃者をターゲットに設定
-    if (finalDamage > 0 && source) {
-      this.target = source;
-      
-      // アイドルかパトロール中ならチェイスに切り替え
-      if (this.state === 'idle' || this.state === 'patrol') {
-        this.state = 'chase';
-      }
-      
-      // ランダムで近くの敵に警報
-      if (Math.random() < 0.3) {
-        this.alertNearbyEnemies();
-      }
-    }
+    // ダメージイベントを発火（AIコントローラがリスンしている）
+    this.emit('damage', finalDamage, damageType, isCritical, source);
     
     return finalDamage;
   }
@@ -526,7 +275,6 @@ export default class Enemy extends Character {
     if (this.isDead) return false;
     
     this.isStunned = true;
-    this.state = 'stunned';
     
     // アニメーション
     this.animationState = 'stunned';
@@ -535,24 +283,14 @@ export default class Enemy extends Character {
     // スタン効果の表示
     this.showStunEffect();
     
+    // ActionSystemの動作をキャンセル
+    if (this.actionSystem) {
+      this.actionSystem.cancelEntityActions(this);
+    }
+    
     // スタン解除タイマー
     this.scene.time.delayedCall(duration, () => {
       this.isStunned = false;
-      
-      // 状態の更新
-      if (this.target && !this.target.isDead) {
-        const distanceToTarget = getDistance(
-          this.x, this.y, this.target.x, this.target.y
-        );
-        
-        if (distanceToTarget <= this.attackRange * 32) {
-          this.state = 'attack';
-        } else {
-          this.state = 'chase';
-        }
-      } else {
-        this.state = 'idle';
-      }
       
       // アニメーション更新
       this.animationState = 'idle';
@@ -573,7 +311,9 @@ export default class Enemy extends Character {
       'stun_effect'
     ).setScale(0.8);
     
-    starsEffect.play('stun_anim');
+    if (starsEffect.play) {
+      starsEffect.play('stun_anim');
+    }
     
     // エフェクトが敵に追従
     this.scene.events.on('update', () => {
@@ -606,9 +346,8 @@ export default class Enemy extends Character {
   // ダメージ時のコールバック
   onDamage(amount, damageType, isCritical, source) {
     // AIコントローラに通知
-    if (this.aiController) {
+    if (this.aiController && this.aiController.onOwnerDamaged) {
       this.aiController.onOwnerDamaged(amount, source);
     }
   }
-  
 }

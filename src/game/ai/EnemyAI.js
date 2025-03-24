@@ -2,7 +2,6 @@ import { getDistance } from '../../utils/mathUtils';
 
 /**
  * ActionSystemを用いた敵AI制御クラス
- * 従来のAIController依存を排除し、Actionベースで動作します
  */
 export default class EnemyAI {
   /**
@@ -43,7 +42,7 @@ export default class EnemyAI {
     // 現在のターゲット
     this.target = null;
     
-    // 共有データ（旧ブラックボード相当）
+    // 共有データ
     this.data = new Map();
     
     // 元の位置を記録（復帰用）
@@ -247,6 +246,7 @@ export default class EnemyAI {
       attackRange: this.options.attackRange
     });
     
+    // キューに追加
     this.actionSystem.queueAction(attackAction, true);
   }
 
@@ -293,6 +293,7 @@ export default class EnemyAI {
       topDownMap: this.scene.topDownMap
     });
     
+    // キューに追加
     this.actionSystem.queueAction(chaseAction, true);
   }
 
@@ -313,6 +314,7 @@ export default class EnemyAI {
       fleeSpeed: 1.7
     });
     
+    // キューに追加
     this.actionSystem.queueAction(fleeAction, true);
   }
 
@@ -330,6 +332,7 @@ export default class EnemyAI {
       topDownMap: this.scene.topDownMap
     });
     
+    // キューに追加
     this.actionSystem.queueAction(returnAction, true);
   }
 
@@ -351,6 +354,7 @@ export default class EnemyAI {
         topDownMap: this.scene.topDownMap
       });
       
+      // キューに追加
       this.actionSystem.queueAction(patrolAction, true);
     } else {
       // 待機アクションを作成
@@ -361,6 +365,7 @@ export default class EnemyAI {
         duration: 3000 + Math.random() * 4000
       });
       
+      // キューに追加
       this.actionSystem.queueAction(idleAction, true);
     }
   }
@@ -370,7 +375,7 @@ export default class EnemyAI {
    * @param {number} damage - 受けたダメージ量
    * @param {Character} attacker - 攻撃者（存在する場合）
    */
-  onDamageReceived(damage, attacker = null) {
+  onOwnerDamaged(damage, attacker = null) {
     // 攻撃者をターゲットに設定
     if (attacker && attacker.life > 0 && !attacker.isDead) {
       this.target = attacker;

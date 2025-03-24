@@ -117,9 +117,6 @@ export default class UIScene {
 
         //通知テキスト
         this.notificationText = null;
-
-        this.menuGroup.setVisible(false);
-        this.menuOpen = false;
       }
       
       init(data) {
@@ -284,7 +281,6 @@ export default class UIScene {
       createMenuGroup() {
         // メニューグループ
         this.menuGroup = this.add.group();
-        this.menuGroup.visible = false;
         
         // メニュー背景
         const menuBg = this.add.graphics();
@@ -371,6 +367,8 @@ export default class UIScene {
         this.menuGroup.add(characterButton);
         this.menuGroup.add(settingsButton);
         this.menuGroup.add(backButton);
+
+        this.setGroupVisibility(this.menuGroup, this.menuOpen);
       }
       
       createMenuButton(x, y, text, callback) {
@@ -762,7 +760,7 @@ export default class UIScene {
       
       toggleMenu() {
         this.menuOpen = !this.menuOpen;
-        this.menuGroup.setVisible(this.menuOpen);
+        this.setGroupVisibility(this.menuGroup, this.menuOpen);
         
         // ゲームの一時停止/再開
         if (this.menuOpen) {
@@ -770,6 +768,18 @@ export default class UIScene {
         } else {
           this.scene.resume('MainScene');
         }
+      }
+
+      setGroupVisibility(group, isVisible) {
+        group.setVisible(isVisible);
+        group.getChildren().forEach(child => {
+          if (child instanceof PhaserModule.GameObjects.Container || 
+              child instanceof PhaserModule.GameObjects.Group) {
+            this.setGroupVisibility(child, isVisible);
+          } else {
+            child.setVisible(isVisible);
+          }
+        });
       }
       
       showInventory() {
@@ -1627,17 +1637,6 @@ export default class UIScene {
             this.notificationText = null;
           }
         });
-      }
-
-      resetMenuState() {
-        if (this.menuGroup) {
-          this.menuGroup.setVisible(false);
-          this.menuOpen = false;
-        }
-        // 必要であればMainSceneを再開
-        if (this.scene.isPaused('MainScene')) {
-          this.scene.resume('MainScene');
-        }
       }
     }
     
