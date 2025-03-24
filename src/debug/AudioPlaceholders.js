@@ -44,7 +44,8 @@ const AudioPlaceholders = {
       try {
         console.log('🔊 音声プレースホルダーを初期化中...');
         
-        // 必要に応じて何か初期化処理を行う
+        // デフォルトのプレースホルダーサウンドを作成
+        this.initializeDefaultSounds(scene);
         
         this.initialized = true;
         console.log('✅ 音声プレースホルダーの初期化完了');
@@ -53,6 +54,50 @@ const AudioPlaceholders = {
         console.error('音声プレースホルダーの初期化中にエラーが発生しました:', error);
         return false;
       }
+    },
+
+    /**
+     * 初期化時に必要なプレースホルダーサウンドを作成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     */
+    initializeDefaultSounds(scene) {
+      if (!this.debugMode || !scene) return;
+
+      console.log('🔊 デフォルトサウンドプレースホルダーを初期化中...');
+
+      // SFXの定義（キーとタイプを明示的に指定）
+      const sfxList = [
+        { key: 'sfx_attack', type: 'attack' },
+        { key: 'sfx_spell', type: 'spell' },
+        { key: 'sfx_item', type: 'item' },
+        { key: 'click-sfx', type: 'click' },
+        { key: 'hover-sfx', type: 'hover' },
+        { key: 'game_over', type: 'game_over' }
+      ];
+
+      // SFXを生成（明示的にタイプを渡す）
+      sfxList.forEach(sfx => {
+        this.addSfxPlaceholder(scene, sfx.key, sfx.type);
+      });
+
+      // BGMを全て作成
+      const bgmList = [
+        { key: 'bgm_main' },
+        { key: 'bgm_battle' },
+        { key: 'bgm_town' }
+      ];
+
+      // SFXを生成
+      sfxList.forEach(sfx => {
+        this.addSfxPlaceholder(scene, sfx.key, sfx.type);
+      });
+
+      // BGMを生成
+      bgmList.forEach(bgm => {
+        this.addBgmPlaceholder(scene, bgm.key);
+      });
+
+      console.log('✅ デフォルトサウンドプレースホルダーの初期化完了');
     },
     
     /**
@@ -112,7 +157,7 @@ const AudioPlaceholders = {
      * @param {string} key - 音声キー
      * @param {string} type - 効果音タイプ ('click', 'hover', 'attack', 'spell', 'item' など)
      */
-    addSfxPlaceholder(scene, key, type = 'click') {
+    addSfxPlaceholder(scene, key, type = null) {
       if (!this.debugMode) return;
       if (!scene || !scene.sound) return;
       
@@ -122,6 +167,19 @@ const AudioPlaceholders = {
         if (!audioContext) {
           console.warn(`AudioContextが利用できないため、プレースホルダー ${key} を作成できません`);
           return;
+        }
+        
+        // typeが指定されていない場合は、keyから推測する
+        if (!type) {
+          // キーからプレフィックスを取り除いてタイプを判定
+          let effectType = key;
+          if (key.startsWith('sfx_')) {
+            effectType = key.substring(4);
+          } else if (key.endsWith('-sfx')) {
+            effectType = key.substring(0, key.length - 4);
+          }
+          
+          type = this.getAudioTypeFromKey(effectType);
         }
         
         // バッファを生成（キャッシュがあればそれを使用）

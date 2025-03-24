@@ -58,14 +58,31 @@ class PlaceholderAssets {
      * @param {Phaser.Scene} scene - Phaserシーン
      */
     createCharacterPlaceholders(scene) {
-      // プレイヤーキャラクタータイプと色のマッピング
+      // プレイヤータイプごとのプレースホルダー作成
+      const playerTypes = ['warrior', 'rogue', 'sorcerer'];
       const playerColors = {
         warrior: 0x8B0000, // 暗い赤
         rogue: 0x006400,   // 暗い緑
         sorcerer: 0x00008B  // 暗い青
       };
       
+      // プレイヤータイプごとのプレースホルダーを作成
+      playerTypes.forEach(type => {
+        const key = `player_${type}`;
+        this.createColorRect(scene, key, 32, 32, playerColors[type] || 0x00FF00);
+        this.placeholders[key] = { type: 'player', color: playerColors[type], width: 32, height: 32 };
+      });
+      
+      // コンパニオンタイプごとのプレースホルダーを作成
+      playerTypes.forEach(type => {
+        const key = `companion_${type}`;
+        const color = playerColors[type] ? brightenColor(playerColors[type], 30) : 0x00FFFF;
+        this.createColorRect(scene, key, 32, 32, color);
+        this.placeholders[key] = { type: 'companion', color: color, width: 32, height: 32 };
+      });
+      
       // 敵キャラクタータイプと色のマッピング
+      const enemyTypes = ['skeleton', 'zombie', 'ghost', 'spider', 'slime', 'wolf', 'boss'];
       const enemyColors = {
         skeleton: 0xBDBDBD,  // 薄い灰色
         zombie: 0x556B2F,    // オリーブ
@@ -76,7 +93,15 @@ class PlaceholderAssets {
         boss: 0xFF0000       // 赤
       };
       
+      // 敵タイプごとのプレースホルダーを作成
+      enemyTypes.forEach(type => {
+        const key = `enemy_${type}`;
+        this.createColorRect(scene, key, 32, 32, enemyColors[type] || 0xFF0000);
+        this.placeholders[key] = { type: 'enemy', color: enemyColors[type], width: 32, height: 32 };
+      });
+      
       // NPCタイプと色のマッピング
+      const npcTypes = ['villager', 'guard', 'blacksmith', 'merchant', 'alchemist'];
       const npcColors = {
         villager: 0xFFD700,   // 金色
         guard: 0x4682B4,      // スティールブルー
@@ -85,31 +110,17 @@ class PlaceholderAssets {
         alchemist: 0x32CD32   // ライムグリーン
       };
       
-      // プレイヤーキャラクタープレースホルダー作成
-      Object.entries(playerColors).forEach(([type, color]) => {
-        // 4方向すべてのプレースホルダーを作成
-        ['up', 'down', 'left', 'right'].forEach(direction => {
-          this.createDirectionalCharacter(scene, `player_${type}_${direction}`, color, direction);
-        });
+      // NPCタイプごとのプレースホルダーを作成
+      npcTypes.forEach(type => {
+        const key = `npc_${type}`;
+        this.createColorRect(scene, key, 32, 32, npcColors[type] || 0x0000FF);
+        this.placeholders[key] = { type: 'npc', color: npcColors[type], width: 32, height: 32 };
       });
       
-      // 敵キャラクタープレースホルダー作成
-      Object.entries(enemyColors).forEach(([type, color]) => {
-        ['up', 'down', 'left', 'right'].forEach(direction => {
-          this.createDirectionalCharacter(scene, `enemy_${type}_${direction}`, color, direction);
-        });
-      });
-      
-      // NPCキャラクタープレースホルダー作成
-      Object.entries(npcColors).forEach(([type, color]) => {
-        ['up', 'down', 'left', 'right'].forEach(direction => {
-          this.createDirectionalCharacter(scene, `npc_${type}_${direction}`, color, direction);
-        });
-      });
-      
-      // 共通プレースホルダー（デバッグ用）
+      // 共通プレースホルダー（デバッグ用）は残しておく
       this.createColorRect(scene, 'character_placeholder', 32, 32, 0x00FF00);
     }
+    
     
     /**
      * 方向付きキャラクタープレースホルダー作成

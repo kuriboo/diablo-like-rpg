@@ -1,3 +1,5 @@
+// src/game/scenes/LoadingScene.js
+
 // Phaserを動的にロードするためのユーティリティ
 let PhaserModule = null;
 
@@ -20,11 +22,13 @@ async function getSceneClass() {
   return phaser.Scene || phaser.default.Scene;
 }
 
-import AssetPipeline from '../AssetPipeline';
+// 依存関係をインポート
 import { SCENES } from '../constants';
+import AssetManager from '../AssetManager';
 import PlaceholderAssets from '../../../debug/PlaceholderAssets';
-import { isDebugMode } from '../../../debug';
+import SimplePlaceholderAssets from '../../../debug/SimplePlaceholderAssets';
 import AudioPlaceholders from '../../../debug/AudioPlaceholders';
+import { isDebugMode } from '../../../debug';
 
 /**
  * LoadingScene - ゲームアセットの読み込みを担当するシーン
@@ -100,7 +104,18 @@ export default class LoadingScene {
       
       // ロゴと背景
       { key: 'logo', path: 'assets/images/ui/logo.png' },
-      { key: 'background', path: 'assets/images/ui/background.png' }
+      { key: 'background', path: 'assets/images/ui/background.png' },
+      
+      // メニュー要素（SimplePlaceholderAssets用）
+      { key: 'menu-background', path: 'assets/images/ui/menu-background.png' },
+      { key: 'game-logo', path: 'assets/images/ui/game-logo.png' },
+      { key: 'button-normal', path: 'assets/images/ui/button-normal.png' },
+      { key: 'button-hover', path: 'assets/images/ui/button-hover.png' },
+      { key: 'options-background', path: 'assets/images/ui/options-background.png' },
+      { key: 'slider-track', path: 'assets/images/ui/slider-track.png' },
+      { key: 'slider-thumb', path: 'assets/images/ui/slider-thumb.png' },
+      { key: 'checkbox-on', path: 'assets/images/ui/checkbox-on.png' },
+      { key: 'checkbox-off', path: 'assets/images/ui/checkbox-off.png' }
     ],
     
     // スプライトシート
@@ -162,18 +177,34 @@ export default class LoadingScene {
         this.progressBox = null;
         this.loadingAssets = LoadingScene.loadingAssets;
         
-        // アセットパイプライン
-        this.assetPipeline = null;
+        // AssetManagerのインスタンスを取得
+        this.assetManager = AssetManager;
       }
       
       preload() {
         // プログレスバーとテキストの初期設定
         this.setupProgressBar();
+        
+        // AssetManagerを初期化
+        this.assetManager.initialize(this);
     
-        // デバッグモードの場合、プレースホルダーアセットを初期化
+        // デバッグモードの場合、プレースホルダーライブラリを初期化
         if (isDebugMode) {
           console.log('デバッグモード: プレースホルダーアセットを初期化中...');
+          
+          // PlaceholderAssetsを手動で初期化しておく（AssetManagerの内部実装でも行われる）
           PlaceholderAssets.initialize(this);
+          
+          // SimplePlaceholderAssetsを初期化（UI関連のプレースホルダー）
+          SimplePlaceholderAssets.setDebugMode(true);
+          SimplePlaceholderAssets.initialize(this);
+          
+          // AudioPlaceholdersを初期化（サウンド関連のプレースホルダー）
+          AudioPlaceholders.setDebugMode(true);
+          AudioPlaceholders.initialize(this);
+          
+          // ロード中のエラーハンドリングを改善
+          this.setupErrorHandling();
         }
         
         // アセットの読み込み
@@ -182,88 +213,11 @@ export default class LoadingScene {
         // ロード進捗イベントのリスナー
         this.load.on('progress', this.updateProgressBar, this);
         this.load.on('complete', this.completeLoading, this);
-        
-        if (isDebugMode) {
-          console.log('🎮 デバッグモード: 音声プレースホルダーを準備中...');
-          
-          // 音声ロードのモック
-          const originalLoadAudio = this.load.audio;
-          
-          // 音声ロード関数をオーバーライド
-          this.load.audio = (key, urls) => {
-            // キーをキャッシュに登録するだけ（実際にはロードしない）
-            console.log(`🔊 音声アセットスキップ: ${key}`);
-            
-            // 音声が再生されたときにエラーにならないようモックオブジェクトを登録
-            if (!this.cache.audio.exists(key)) {
-              this.cache.audio.add(key, {
-                duration: 0,
-                isPlaying: false,
-                mute: false,
-                // ダミー関数を提供
-                play: () => { console.log(`▶️ モック音声再生: ${key}`); return this; },
-                stop: () => { return this; },
-                pause: () => { return this; },
-                resume: () => { return this; }
-              });
-            }
-            
-            return this;
-          };
-          
-          // サウンドシステムのモック拡張
-          if (this.sound) {
-            // オリジナルのメソッドを保存
-            const originalAdd = this.sound.add;
-            const originalPlay = this.sound.play;
-            
-            // add メソッドをオーバーライド
-            this.sound.add = (key, config) => {
-              console.log(`🔊 モック音声追加: ${key}`);
-              
-              // モックサウンドオブジェクトを返す
-              return {
-                key: key,
-                isPlaying: false,
-                isPaused: false,
-                loop: config?.loop || false,
-                volume: config?.volume || 1,
-                // 音声メソッドをモック
-                play: () => { console.log(`▶️ モック音声再生: ${key}`); return this; },
-                stop: () => { return this; },
-                pause: () => { return this; },
-                resume: () => { return this; },
-                setVolume: () => { return this; },
-                setLoop: () => { return this; },
-                setRate: () => { return this; }
-              };
-            };
-            
-            // play メソッドをオーバーライド
-            this.sound.play = (key, config) => {
-              console.log(`▶️ モック音声再生: ${key}`);
-              return this;
-            };
-          }
-          
-          // 必要なサウンドキーをあらかじめ登録
-          this.dummySoundKeys = [
-            'menu-bgm',
-            'hover-sfx',
-            'click-sfx',
-            'bgm_main',
-            'bgm_battle',
-            'bgm_town',
-            'sfx_attack',
-            'sfx_spell',
-            'sfx_item',
-            'game_over'
-          ];
-          
-          // すべてのダミーサウンドを登録
-          this.dummySoundKeys.forEach(key => {
-            this.load.audio(key, '');
-          });
+
+        if (isDebugMode && AudioPlaceholders) {
+          console.log('🎮 デバッグモード: オーディオプレースホルダーを初期化...');
+          AudioPlaceholders.setDebugMode(true);
+          AudioPlaceholders.initialize(this);
         }
       }
       
@@ -273,55 +227,145 @@ export default class LoadingScene {
         // アニメーションの作成（キャラクターなど）
         this.createAnimations();
         
-        // アセットパイプラインの初期化
-        this.initializeAssetPipeline();
-
         if (isDebugMode) {
-          console.log('🎮 デバッグモード: 音声システムをモックに置き換え中...');
-          
-          // グローバルなサウンドシステムもモック化（他のシーンのためにゲーム全体に適用）
-          if (this.sys.game.sound) {
-            // オリジナルのメソッドを保存
-            const originalAdd = this.sys.game.sound.add;
-            const originalPlay = this.sys.game.sound.play;
-            
-            // add メソッドをオーバーライド
-            this.sys.game.sound.add = (key, config) => {
-              console.log(`🔊 モック音声追加(グローバル): ${key}`);
-              
-              // モックサウンドオブジェクトを返す
-              return {
-                key: key,
-                isPlaying: false,
-                isPaused: false,
-                loop: config?.loop || false,
-                volume: config?.volume || 1,
-                // 音声メソッドをモック
-                play: function() { 
-                  console.log(`▶️ モック音声再生(グローバル): ${key}`); 
-                  return this; 
-                },
-                stop: function() { return this; },
-                pause: function() { return this; },
-                resume: function() { return this; },
-                setVolume: function() { return this; },
-                setLoop: function() { return this; },
-                setRate: function() { return this; }
-              };
-            };
-            
-            // play メソッドをオーバーライド
-            this.sys.game.sound.play = (key, config) => {
-              console.log(`▶️ モック音声再生(グローバル): ${key}`);
-              return null;
-            };
-          }
+          console.log('🎮 デバッグモード: AssetManagerのデバッグ情報を表示...');
+          this.assetManager.printAssetList();
         }
+        
+        // AssetManagerをゲームデータに登録
+        this.registry.set('assetManager', this.assetManager);
         
         // 短い遅延後にメニューシーンへ移動
         this.time.delayedCall(500, () => {
           this.scene.start(SCENES.MAIN_MENU);
         });
+      }
+      
+      /**
+       * エラーハンドリングのセットアップ
+       */
+      setupErrorHandling() {
+        // アセット読み込みエラーのハンドリング
+        this.load.on('loaderror', (fileObj) => {
+          console.warn(`⚠️ アセット読み込みエラー: ${fileObj.key} - プレースホルダーを使用します`);
+          
+          // アセットタイプに基づいてプレースホルダーを生成
+          if (fileObj.type === 'image' || fileObj.type === 'spritesheet') {
+            this.createTextureErrorPlaceholder(fileObj);
+          } else if (fileObj.type === 'audio') {
+            this.createAudioErrorPlaceholder(fileObj);
+          }
+        });
+      }
+      
+      /**
+       * テクスチャエラー時のプレースホルダー生成
+       * @param {Phaser.Loader.File} fileObj - ロードに失敗したファイルオブジェクト
+       */
+      createTextureErrorPlaceholder(fileObj) {
+        const key = fileObj.key;
+        
+        // キーから種類を判断
+        let type = 'character';
+        let color = 0xFFFF00; // デフォルト色
+        let width = 32;
+        let height = 32;
+        
+        if (key.includes('player')) {
+          type = 'player';
+          color = 0x00FF00;
+        } else if (key.includes('enemy')) {
+          type = 'enemy';
+          color = 0xFF0000;
+        } else if (key.includes('npc')) {
+          type = 'npc';
+          color = 0x0000FF;
+        } else if (key.includes('tile')) {
+          type = 'tile';
+          color = 0x888888;
+        } else if (key.includes('obstacle')) {
+          type = 'obstacle';
+          color = 0x8B4513;
+        } else if (key.includes('item')) {
+          type = 'item';
+          color = 0xFFFF00;
+          width = 16;
+          height = 16;
+        } else if (key.includes('ui')) {
+          type = 'ui';
+          color = 0x333333;
+          if (key.includes('button')) {
+            width = 100;
+            height = 30;
+          } else if (key.includes('panel')) {
+            width = 200;
+            height = 150;
+          }
+        } else if (key.includes('effect')) {
+          type = 'effect';
+          color = 0xFFFFFF;
+          width = 64;
+          height = 64;
+        } else if (key.includes('menu') || key.includes('button') || key.includes('checkbox') || key.includes('slider')) {
+          // SimplePlaceholderAssetsを使用
+          SimplePlaceholderAssets.safeLoadImage(this, key, '');
+          return;
+        }
+        
+        // PlaceholderAssetsを使用してプレースホルダーを生成
+        if (PlaceholderAssets.hasTexture(this, key)) {
+          return; // すでに作成済み
+        }
+        
+        if (typeof PlaceholderAssets.createColorRect === 'function') {
+          PlaceholderAssets.createColorRect(this, key, width, height, color);
+          console.log(`🎨 プレースホルダー生成: ${key} (${type})`);
+          
+          // AssetManagerに登録
+          if (fileObj.type === 'spritesheet') {
+            this.assetManager.registerTexture(key, 'spritesheet');
+          } else {
+            this.assetManager.registerTexture(key, 'texture');
+          }
+        } else {
+          // フォールバックのプレースホルダーを使用
+          const placeholderKey = PlaceholderAssets.getFallbackTexture(this, type);
+          if (placeholderKey) {
+            console.log(`🎨 フォールバックプレースホルダー使用: ${key} → ${placeholderKey}`);
+            
+            // AssetManagerに登録
+            if (fileObj.type === 'spritesheet') {
+              this.assetManager.registerTexture(placeholderKey, 'spritesheet');
+            } else {
+              this.assetManager.registerTexture(placeholderKey, 'texture');
+            }
+          }
+        }
+      }
+      
+      /**
+       * オーディオエラー時のプレースホルダー生成
+       * @param {Phaser.Loader.File} fileObj - ロードに失敗したファイルオブジェクト
+       */
+      createAudioErrorPlaceholder(fileObj) {
+        const key = fileObj.key;
+        
+        // AudioPlaceholdersを使用してプレースホルダーを生成
+        if (AudioPlaceholders) {
+          const isBgm = key.includes('bgm');
+          const type = AudioPlaceholders.getAudioTypeFromKey(key);
+          
+          if (isBgm) {
+            AudioPlaceholders.addBgmPlaceholder(this, key);
+          } else {
+            AudioPlaceholders.addSfxPlaceholder(this, key, type);
+          }
+          
+          console.log(`🔊 オーディオプレースホルダー生成: ${key} (${isBgm ? 'BGM' : 'SFX'})`);
+          
+          // AssetManagerに登録
+          this.assetManager.registerAudio(key);
+        }
       }
       
       /**
@@ -360,7 +404,12 @@ export default class LoadingScene {
       loadAssets() {
         // 画像読み込み
         this.loadingAssets.images.forEach(img => {
-          this.load.image(img.key, img.path);
+          if (isDebugMode) {
+            // デバッグモードではSimplePlaceholderAssetsを使用
+            SimplePlaceholderAssets.safeLoadImage(this, img.key, img.path);
+          } else {
+            this.load.image(img.key, img.path);
+          }
         });
         
         // スプライトシート読み込み
@@ -370,7 +419,15 @@ export default class LoadingScene {
         
         // オーディオ読み込み
         this.loadingAssets.audio.forEach(audio => {
-          this.load.audio(audio.key, audio.path);
+          if (isDebugMode) {
+            // デバッグモードではAudioPlaceholdersを使用
+            AudioPlaceholders.safeLoadAudio(this, audio.key, audio.path);
+          } else {
+            this.load.audio(audio.key, audio.path);
+          }
+          
+          // AssetManagerに事前に登録しておく
+          this.assetManager.registerAudio(audio.key);
         });
         
         // その他のアセット読み込み
@@ -381,27 +438,6 @@ export default class LoadingScene {
             this.load.atlas(asset.key, asset.imagePath, asset.jsonPath);
           }
         });
-    
-        // デバッグモードでエラー表示を少なくする（アセット不足対策）
-        if (isDebugMode) {
-          // アセット読み込みエラーのハンドリング
-          this.load.on('loaderror', (fileObj) => {
-            console.warn(`⚠️ アセット読み込みエラー: ${fileObj.key} - プレースホルダーを使用します`);
-            
-            // アセットタイプに基づいてプレースホルダーを生成
-            if (fileObj.key.includes('player')) {
-              PlaceholderAssets.getFallbackTexture(this, 'player');
-            } else if (fileObj.key.includes('enemy')) {
-              PlaceholderAssets.getFallbackTexture(this, 'enemy');
-            } else if (fileObj.key.includes('tile')) {
-              PlaceholderAssets.getFallbackTexture(this, 'tile');
-            } else if (fileObj.key.includes('item')) {
-              PlaceholderAssets.getFallbackTexture(this, 'item');
-            } else {
-              PlaceholderAssets.getFallbackTexture(this, 'character');
-            }
-          });
-        }
       }
       
       /**
@@ -429,6 +465,10 @@ export default class LoadingScene {
         // 「ロード完了」テキストに変更
         this.loadingText.setText('Load Complete!');
         this.percentText.setText('100%');
+        
+        // ロード完了時にAssetManagerを更新
+        this.assetManager.scanTextures(this);
+        this.assetManager.scanAudio(this);
       }
       
       /**
@@ -522,28 +562,6 @@ export default class LoadingScene {
             });
           }
         });
-      }
-      
-      /**
-       * アセットパイプラインの初期化
-       */
-      initializeAssetPipeline() {
-        try {
-          // アセットパイプラインの作成と初期化
-          this.assetPipeline = new AssetPipeline(this);
-          const initialized = this.assetPipeline.initialize();
-          
-          // 初期化が成功したら、ゲームデータに設定
-          if (initialized) {
-            // ゲームデータを取得（存在しなければ作成）
-            this.registry.set('assetPipeline', this.assetPipeline);
-            console.log('LoadingScene: AssetPipeline initialized and registered.');
-          } else {
-            console.error('LoadingScene: Failed to initialize AssetPipeline.');
-          }
-        } catch (error) {
-          console.error('LoadingScene: Error initializing AssetPipeline:', error);
-        }
       }
     }
     

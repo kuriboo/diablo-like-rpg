@@ -39,6 +39,7 @@ import PlaceholderAssets from '../../../debug/PlaceholderAssets';
 import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
 import { SCENES } from '../constants';
 import { getDistance } from '../../../utils/mathUtils';
+import AssetManager from '../AssetManager';
 
 // ActionSystemのインポート
 import ActionSystem from '../../actions/ActionSystem';
@@ -95,6 +96,9 @@ export default class MainScene {
         // 前のシーンからのデータ受け取り
         this.gameData = data.gameData || this.gameData;
         
+        // AssetManagerを現在のシーンで更新
+        AssetManager.updateScene(this);
+        
         // ActionSystemの初期化
         this.actionSystem = ActionSystem.getInstance();
         
@@ -105,7 +109,7 @@ export default class MainScene {
         
         // スキルツリーマネージャーの初期化
         this.skillTreeManager = SkillTreeManager;
-
+      
         // デバッグフラグ
         this.isDebugMode = process.env.NODE_ENV !== 'production';
       }
@@ -113,122 +117,8 @@ export default class MainScene {
       preload() {
         // 必要なアセットの読み込み
         // (既にLoadingSceneで読み込まれているはず)
-        
-        // デバッグモードの場合、プレースホルダーアセットをロード
-        if (this.isDebugMode) {
-          //this.loadDebugAssets();
-        }
       }
       
-      /**
-       * デバッグ用のアセットをロード
-       */
-      loadDebugAssets() {
-        // プレースホルダーアセットの使用y
-        const placeholders = PlaceholderAssets.placeholders;
-        
-        // 必要な画像をロード（存在するかチェックして）
-        // プレイヤー
-        if (placeholders.player) {
-          this.load.image('player_placeholder', placeholders.player);
-        }
-        
-        // 敵タイプ
-        if (placeholders.enemy_normal) {
-          this.load.image('enemy_normal_placeholder', placeholders.enemy_normal);
-        }
-        if (placeholders.enemy_elite) {
-          this.load.image('enemy_elite_placeholder', placeholders.enemy_elite);
-        }
-        if (placeholders.enemy_boss) {
-          this.load.image('enemy_boss_placeholder', placeholders.enemy_boss);
-        }
-        
-        // コンパニオン
-        if (placeholders.companion) {
-          this.load.image('companion_placeholder', placeholders.companion);
-        }
-        
-        // NPCタイプ
-        if (placeholders.npc_villager) {
-          this.load.image('npc_villager_placeholder', placeholders.npc_villager);
-        }
-        if (placeholders.npc_guard) {
-          this.load.image('npc_guard_placeholder', placeholders.npc_guard);
-        }
-        if (placeholders.npc_merchant) {
-          this.load.image('npc_merchant_placeholder', placeholders.npc_merchant);
-        }
-        if (placeholders.npc_blacksmith) {
-          this.load.image('npc_blacksmith_placeholder', placeholders.npc_blacksmith);
-        }
-        if (placeholders.npc_alchemist) {
-          this.load.image('npc_alchemist_placeholder', placeholders.npc_alchemist);
-        }
-        
-        // エフェクト
-        if (placeholders.slash_effect) {
-          this.load.spritesheet('slash_effect', placeholders.slash_effect, { 
-            frameWidth: 64, frameHeight: 64 
-          });
-        }
-        if (placeholders.impact_effect) {
-          this.load.spritesheet('impact_effect', placeholders.impact_effect, { 
-            frameWidth: 64, frameHeight: 64 
-          });
-        }
-        if (placeholders.skill_effect) {
-          this.load.spritesheet('skill_effect', placeholders.skill_effect, { 
-            frameWidth: 64, frameHeight: 64 
-          });
-        }
-        
-        // アイテム
-        if (placeholders.item_potion) {
-          this.load.image('item_potion_placeholder', placeholders.item_potion);
-        }
-        if (placeholders.item_weapon) {
-          this.load.image('item_weapon_placeholder', placeholders.item_weapon);
-        }
-        if (placeholders.item_armor) {
-          this.load.image('item_armor_placeholder', placeholders.item_armor);
-        }
-        
-        // UIエレメント
-        if (placeholders.ui_button) {
-          this.load.image('ui_button_placeholder', placeholders.ui_button);
-        }
-        
-        // デバッグ用のアニメーション設定
-        if (this.anims && placeholders.slash_effect) {
-          this.anims.create({
-            key: 'slash_anim',
-            frames: this.anims.generateFrameNumbers('slash_effect', { start: 0, end: 5 }),
-            frameRate: 15,
-            repeat: 0
-          });
-        }
-        
-        if (this.anims && placeholders.impact_effect) {
-          this.anims.create({
-            key: 'impact_anim',
-            frames: this.anims.generateFrameNumbers('impact_effect', { start: 0, end: 5 }),
-            frameRate: 15,
-            repeat: 0
-          });
-        }
-        
-        if (this.anims && placeholders.skill_effect) {
-          this.anims.create({
-            key: 'skill_anim',
-            frames: this.anims.generateFrameNumbers('skill_effect', { start: 0, end: 7 }),
-            frameRate: 15,
-            repeat: 0
-          });
-        }
-        
-        console.log('🎮 デバッグアセットをロード完了');
-      }
       
       async create() {
         console.log('MainScene: create');
@@ -444,7 +334,7 @@ export default class MainScene {
         
         return Math.floor((this.gameData.currentLevel / maxLevel) * 100);
       }
-      
+
       /**
        * プレイヤーの作成
        */
@@ -459,15 +349,16 @@ export default class MainScene {
           const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
           const playerClass = this.gameData.playerClass || 'warrior';
           
-          // デバッグモードの場合はプレースホルダーテクスチャを使用
-          const texture = this.isDebugMode ? 'player_placeholder' : (playerClass || 'warrior');
+          // AssetManagerからプレイヤーのテクスチャキーを取得
+          // 必ずAssetManagerを使用し、フォールバックもAssetManagerに任せる
+          const texture = AssetManager.getTextureKey('player', playerClass);
           
           // プレイヤーキャラクターの作成 - パラメータを明示的に指定
           this.player = this.characterFactory.createPlayer({
             scene: this,
             x: worldPos.x,
             y: worldPos.y,
-            texture: texture,
+            texture: texture,  // AssetManagerが適切なテクスチャキーを返す（プレースホルダー含む）
             level: playerLevel,
             classType: {
               name: playerClass || 'warrior' // クラスタイプを明示的にオブジェクトとして渡す
@@ -478,9 +369,8 @@ export default class MainScene {
           // プレイヤーをシーンに追加
           this.add.existing(this.player);
           
-          // デプスソートは不要になるためコメントアウトまたは削除
-          // TopDownでは単純なシーンのdepthプロパティで重なり順を制御
-          this.player.setDepth(10); // キャラクターの深度を設定
+          // キャラクターの深度を設定
+          this.player.setDepth(10);
           
           // プレイヤー作成イベント
           this.events.emit('player-created', this.player);
@@ -505,10 +395,10 @@ export default class MainScene {
             // ダミープレイヤーステータスの生成
             const playerStats = generatePlayerStats('warrior', 5, 'デバッグプレイヤー');
             
-            // デバッグモードの場合はプレースホルダーテクスチャを使用
-            const texture = 'player_placeholder';
+            // AssetManagerからテクスチャキーを取得
+            const texture = AssetManager.getTextureKey('player', 'warrior');
             
-            // プレイヤーキャラクターの作成 - この場合も classType を明示的に指定
+            // プレイヤーキャラクターの作成
             this.player = this.characterFactory.createPlayer({
               scene: this,
               x: worldPos.x,
@@ -564,9 +454,11 @@ export default class MainScene {
         // ワールド座標に変換
         const worldPos = this.topDownMap.tileToWorldXY(companionPos.x, companionPos.y);
         
-        // デバッグモードの場合はプレースホルダーテクスチャを使用
-        const texture = this.isDebugMode ? 'companion_placeholder' : 
-                         (this.gameData.companionType || 'rogue');
+        // コンパニオンタイプを取得
+        const companionType = this.gameData.companionType || 'rogue';
+        
+        // AssetManagerからコンパニオンのテクスチャキーを取得
+        const texture = AssetManager.getTextureKey('companion', companionType);
         
         // コンパニオンの作成
         const companion = this.characterFactory.createCompanion({
@@ -575,7 +467,7 @@ export default class MainScene {
           y: worldPos.y,
           texture: texture,
           level: this.gameData.playerLevel || 1,
-          type: this.gameData.companionType || 'rogue'
+          type: companionType
         });
         
         // コンパニオンをシーンに追加
@@ -584,7 +476,7 @@ export default class MainScene {
         // コンパニオンリストに追加
         this.companions.push(companion);
         
-        // デプスの設定（デプスソートの代わり）
+        // デプスの設定
         companion.setDepth(10);
         
         // ActionSystemを使った新しいAI設定
@@ -593,10 +485,6 @@ export default class MainScene {
           if (companion.ai && companion.ai.setEnabled) {
             companion.ai.setEnabled(false);
           }
-          
-          // 新しいAIインスタンスの作成（実装済みの場合）
-          // companion.ai = new CompanionAI(companion, {}, this.actionSystem);
-          // companion.ai.setPlayer(this.player);
         }
         // 従来のAIシステム
         else if (companion.ai) {
@@ -623,12 +511,11 @@ export default class MainScene {
           const level = Math.max(1, this.player.level + Math.floor(Math.random() * 5) - 2);
           
           // 敵タイプをランダムに決定
-          const enemyTypes = ['normal', 'elite', 'boss'];
-          const typeIndex = Math.random() < 0.7 ? 0 : (Math.random() < 0.85 ? 1 : 2);
-          const enemyType = enemyTypes[typeIndex];
+          const enemyTypes = ['skeleton', 'zombie', 'ghost', 'spider', 'slime', 'wolf'];
+          const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
           
-          // プレースホルダーテクスチャを使用
-          const texture = `enemy_${enemyType}_placeholder`;
+          // AssetManagerから敵のテクスチャキーを取得
+          const texture = AssetManager.getTextureKey('enemy', enemyType);
           
           // 敵キャラクターの作成
           const enemy = this.characterFactory.createEnemy({
@@ -639,13 +526,6 @@ export default class MainScene {
             level: level,
             type: enemyType
           });
-          
-          // ボスタイプなら大きくする
-          if (enemyType === 'boss') {
-            enemy.setScale(1.5);
-          } else if (enemyType === 'elite') {
-            enemy.setScale(1.2);
-          }
           
           // 敵をシーンに追加
           this.add.existing(enemy);
@@ -858,8 +738,8 @@ export default class MainScene {
               const npcType = npcTypes[Math.floor(Math.random() * npcTypes.length)];
               const isShop = Math.random() < 0.5;
               
-              // テクスチャ
-              const texture = `npc_${npcType}_placeholder`;
+              // AssetManagerからNPCのテクスチャキーを取得
+              const texture = AssetManager.getTextureKey('npc', npcType);
               
               // NPCの生成
               const npc = this.characterFactory.createNPC({
@@ -908,12 +788,15 @@ export default class MainScene {
               // ワールド座標に変換
               const worldPos = this.topDownMap.tileToWorldXY(bossPos.x, bossPos.y);
               
+              // AssetManagerからボス敵のテクスチャキーを取得
+              const texture = AssetManager.getTextureKey('enemy', 'boss');
+              
               // ボス敵の生成
               const boss = this.characterFactory.createEnemy({
                 scene: this,
                 x: worldPos.x,
                 y: worldPos.y,
-                texture: 'enemy_boss_placeholder',
+                texture: texture,
                 level: this.player.level + 2,
                 type: 'boss'
               });
@@ -928,17 +811,6 @@ export default class MainScene {
               
               // デプスの設定
               boss.setDepth(10);
-              
-              // ActionSystemを使った新しいAI設定（実装済みの場合）
-              if (this.actionSystem) {
-                // 旧AIインスタンスがあれば無効化
-                if (boss.ai && boss.ai.setEnabled) {
-                  boss.ai.setEnabled(false);
-                }
-                
-                // 新しいAIインスタンスを設定
-                // boss.ai = new EnemyAI(boss, { aggressiveness: 0.9 }, this.actionSystem);
-              }
               
               console.log(`👹 デバッグボス追加: Lv.${boss.level}`);
             }

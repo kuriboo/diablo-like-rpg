@@ -1,6 +1,7 @@
 import Action from './Action';
 import { ActionType } from '../../constants/actionTypes';
 import { getDistance } from '../../utils/mathUtils';
+import AssetManager from '../core/AssetManager';
 
 /**
  * 基本的なアクションクラス
@@ -282,10 +283,29 @@ export default class BasicAction extends Action {
     // 攻撃時間の記録
     this.lastAttackTime = Date.now();
     
-    // 効果音再生
-    if (this.scene && this.scene.sound) {
-      const soundKey = this.owner.attackSound || 'slash_sound';
-      this.scene.sound.play(soundKey);
+    // 効果音再生 - AssetManagerの修正版メソッドを使用
+    if (this.scene) {
+      // オーナーの攻撃音が指定されていれば使用、なければデフォルトの攻撃音を使用
+      const soundType = this.owner.attackSoundType || 'attack';
+      
+      try {
+        // AssetManagerのplaySFXメソッドを使用
+        // - 通常再生（キャッシュに存在する場合）
+        // - Web Audio API 直接再生（キャッシュに存在しない場合）
+        const result = AssetManager.playSFX(soundType, {
+          volume: 0.8,
+          rate: 1.0
+        });
+        
+        // 再生に失敗した場合はバックアップとしてWeb Audio APIで直接ビープ音を生成
+        if (!result) {
+          this.playDirectAttackSound();
+        }
+      } catch (error) {
+        console.warn('攻撃音の再生に失敗しました:', error);
+        // Web Audio APIで直接ビープ音を生成
+        this.playDirectAttackSound();
+      }
     }
     
     // 攻撃エフェクト
@@ -720,14 +740,17 @@ export default class BasicAction extends Action {
     const direction = this.getDirectionToTarget() || this.owner.direction || 'down';
     
     // 攻撃タイプに応じたエフェクト
-    let effectKey = 'slash_effect';
+    let effectType = 'slash';
     
     // 武器タイプに応じて変更
     if (this.owner.isUsingRangedWeapon && this.owner.isUsingRangedWeapon()) {
-      effectKey = 'bullet_effect';
+      effectType = 'bullet';
     } else if (!this.owner.isUsingMeleeWeapon || !this.owner.isUsingMeleeWeapon()) {
-      effectKey = 'punch_effect';
+      effectType = 'punch';
     }
+    
+    // AssetManagerからエフェクトのテクスチャキーを取得
+    const effectKey = AssetManager.getTextureKey('effect', effectType);
     
     // エフェクト位置
     let effectX = this.owner.x;
@@ -751,13 +774,13 @@ export default class BasicAction extends Action {
     }
     
     // エフェクト表示
-    if (this.scene.add) {
+    if (this.scene.add && effectKey) {
       const effect = this.scene.add.sprite(effectX, effectY, effectKey);
       effect.setScale(0.5);
       effect.setDepth(50);
       
-      // アニメーション再生
-      const animKey = effectKey.replace('_effect', '_anim');
+      // アニメーション再生 - AssetManagerからアニメーションキーを取得
+      const animKey = AssetManager.getAnimationKey('effect', effectType, 'default') || `${effectType}_anim`;
       if (effect.play) {
         effect.play(animKey);
       }
@@ -787,15 +810,19 @@ export default class BasicAction extends Action {
     const effectX = this.target.x;
     const effectY = this.target.y;
     
+    // AssetManagerからエフェクトのテクスチャキーを取得
+    const effectKey = AssetManager.getTextureKey('effect', 'impact');
+    
     // エフェクト表示
-    if (this.scene.add) {
-      const effect = this.scene.add.sprite(effectX, effectY, 'impact_effect');
+    if (this.scene.add && effectKey) {
+      const effect = this.scene.add.sprite(effectX, effectY, effectKey);
       effect.setScale(0.5);
       effect.setDepth(50);
       
-      // アニメーション再生
+      // アニメーション再生 - AssetManagerからアニメーションキーを取得
+      const animKey = AssetManager.getAnimationKey('effect', 'impact', 'default') || 'impact_anim';
       if (effect.play) {
-        effect.play('impact_anim');
+        effect.play(animKey);
       }
       
       // アニメーション終了時に削除
@@ -1172,6 +1199,47 @@ export default class BasicAction extends Action {
         // パスインデックスをリセット
         this.pathIndex = 0;
       }
+    }
+  }
+
+  /**
+   * Web Audio APIを使って直接攻撃音を生成・再生する
+   * @returns {boolean} 成功した場合はtrue
+   */
+  playDirectAttackSound() {
+    try {
+      // Web Audio APIを使用して一時的なビープ音を作成
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      // 攻撃音の周波数設定
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.3);
+      
+      // 音量エンベロープ
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.02);
+      gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+      
+      // 接続
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // 再生
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.3);
+      
+      // 終了後にコンテキストを閉じる
+      setTimeout(() => {
+        audioContext.close();
+      }, 500);
+      
+      return true;
+    } catch (e) {
+      console.error('直接攻撃音生成エラー:', e);
+      return false;
     }
   }
 
