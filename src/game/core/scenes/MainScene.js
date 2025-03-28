@@ -44,6 +44,120 @@ import AssetManager from '../AssetManager';
 // ActionSystemのインポート
 import ActionSystem from '../../actions/ActionSystem';
 
+/**
+ * マップデータの妥当性をチェックする関数
+ * MainSceneのcreate()メソッド内でマップ生成前に呼び出す
+ */
+function validateMapData(mapData) {
+  if (!mapData) {
+    console.error('マップデータが存在しません');
+    return false;
+  }
+  
+  // 必須フィールドのチェック
+  const requiredFields = ['width', 'height', 'heightMap', 'objectPlacement'];
+  for (const field of requiredFields) {
+    if (!mapData[field]) {
+      console.error(`マップデータに ${field} が存在しません`);
+      return false;
+    }
+  }
+  
+  // サイズチェック
+  const width = mapData.width;
+  const height = mapData.height;
+  
+  // 配列のサイズチェック
+  if (!Array.isArray(mapData.heightMap) || mapData.heightMap.length !== height) {
+    console.error(`heightMapの高さが不正です: ${mapData.heightMap?.length} != ${height}`);
+    return false;
+  }
+  
+  if (!Array.isArray(mapData.objectPlacement) || mapData.objectPlacement.length !== height) {
+    console.error(`objectPlacementの高さが不正です: ${mapData.objectPlacement?.length} != ${height}`);
+    return false;
+  }
+  
+  // 内部配列のチェック
+  for (let y = 0; y < height; y++) {
+    if (!Array.isArray(mapData.heightMap[y]) || mapData.heightMap[y].length !== width) {
+      console.error(`heightMap[${y}]の幅が不正です: ${mapData.heightMap[y]?.length} != ${width}`);
+      return false;
+    }
+    
+    if (!Array.isArray(mapData.objectPlacement[y]) || mapData.objectPlacement[y].length !== width) {
+      console.error(`objectPlacement[${y}]の幅が不正です: ${mapData.objectPlacement[y]?.length} != ${width}`);
+      return false;
+    }
+  }
+  
+  console.log('マップデータの検証に成功しました');
+  return true;
+}
+
+/**
+ * マップデータが不完全な場合にシンプルなデフォルトデータを生成する関数
+ * MainSceneでマップ生成に失敗した場合に呼び出す
+ */
+function createDefaultMapData(width = 20, height = 20) {
+  console.log(`デフォルトマップデータを生成しています (${width}x${height})`);
+  
+  const heightMap = [];
+  const objectPlacement = [];
+  
+  // 高さデータとオブジェクト配置データの初期化
+  for (let y = 0; y < height; y++) {
+    heightMap[y] = [];
+    objectPlacement[y] = [];
+    
+    for (let x = 0; x < width; x++) {
+      // 高さ値：中央付近を高く、外側を低くする簡単な地形
+      const distanceFromCenter = Math.sqrt(
+        Math.pow((x - width / 2) / (width / 2), 2) + 
+        Math.pow((y - height / 2) / (height / 2), 2)
+      );
+      heightMap[y][x] = Math.max(0, Math.min(1, 1 - distanceFromCenter));
+      
+      // オブジェクト配置：外周を壁にし、ランダムに障害物と宝箱を配置
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+        // 外周は壁
+        objectPlacement[y][x] = 3;
+      } else if (Math.random() < 0.1) {
+        // 10%の確率で壁
+        objectPlacement[y][x] = 3;
+      } else if (Math.random() < 0.05) {
+        // 5%の確率で宝箱
+        objectPlacement[y][x] = 2;
+      } else {
+        // それ以外は空きスペース
+        objectPlacement[y][x] = 0;
+      }
+    }
+  }
+  
+  // プレイヤースタート位置付近は必ず移動可能に
+  const centerX = Math.floor(width / 2);
+  const centerY = Math.floor(height / 2);
+  
+  for (let y = centerY - 2; y <= centerY + 2; y++) {
+    for (let x = centerX - 2; x <= centerX + 2; x++) {
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        objectPlacement[y][x] = 0;
+      }
+    }
+  }
+  
+  return {
+    width,
+    height,
+    heightMap,
+    objectPlacement,
+    // 最低限必要な他のフィールドを設定
+    enemyPlacement: [],
+    npcPlacement: []
+  };
+}
+
 export default class MainScene {
   // 静的なシーンインスタンスを保持
   static instance = null;
@@ -89,7 +203,7 @@ export default class MainScene {
         this.skillTreeManager = null;
         
         // 現在のマップタイプ
-        this.currentMapType = 'dungeon';
+        this.currentMapType = 'field';
       }
       
       init(data) {
@@ -165,17 +279,22 @@ export default class MainScene {
         
         // ゲーム開始イベント
         this.events.emit('game-started', this.gameData);
+
+        // MainScene.js内のマップ生成前に追加
+        /*if (!validateMapData(this.topDownMap.mapData)) {
+          // データに問題がある場合、デフォルトのマップデータを生成
+          this.topDownMap.setMapData( createDefaultMapData() );
+        }*/
         
-        // FPSカウンターの表示（デバッグ用）
-        if (this.game.config.physics.arcade?.debug) {
+         // デバッグモードの初期化
+        if (this.isDebugMode) {
+
+          Debug.initialize(this);
+
+          // FPSカウンターの表示（デバッグ用）
           this.fpsText = this.add.text(10, 10, '', { font: '16px Arial', fill: '#00ff00' });
           this.fpsText.setScrollFactor(0);
           this.fpsText.setDepth(999);
-        }
-
-         // デバッグモードの初期化
-        if (this.isDebugMode) {
-          Debug.initialize(this);
 
           // 物理ボディのデバッグ表示を有効化
           this.physics.world.createDebugGraphic();
@@ -209,9 +328,29 @@ export default class MainScene {
               );
             });
           }
+
+          // マップ情報を表示
+          if (this.topDownMap && this.topDownMap.map) {
+            console.log('🗺️ マップ情報:', {
+              width: this.topDownMap.width,
+              height: this.topDownMap.height,
+              tileSize: this.topDownMap.tileSize,
+              groundLayer: this.topDownMap.groundLayer ? 'loaded' : 'missing',
+              objectLayer: this.topDownMap.objectLayer ? 'loaded' : 'missing',
+              entities: this.topDownMap.entities.length
+            });
+            
+            // マップのタイル数を表示
+            if (this.topDownMap.groundLayer) {
+              const tileCount = this.topDownMap.groundLayer.tilemap.layers.reduce((count, layer) => {
+                return count + layer.data.reduce((c, row) => c + row.filter(tile => tile.index !== -1).length, 0);
+              }, 0);
+              console.log(`🗺️ マップタイル数: ${tileCount}`);
+            }
+          }
           
           // 追加敵の生成（デバッグ用）
-          this.createDebugEnemies();
+          //this.createDebugEnemies();
           
           // ゲームの状態をコンソールに出力
           console.log('🎮 ゲーム状態:', {
@@ -268,9 +407,9 @@ export default class MainScene {
           
           // マップを生成
           const mapData = await this.mapGenerator.generateMap(this.currentMapType);
-
+      
           // マップ生成に失敗した場合や開発中の場合はダミーマップを使用
-          if (!mapData && this.isDebugMode) {
+          /*if (!mapData && this.isDebugMode) {
             console.log('🗺️ ダミーマップを生成します');
             
             // DebugUtilsのgenerateMapData関数を使用
@@ -282,15 +421,22 @@ export default class MainScene {
             
             console.log(`🗺️ ダミーマップ生成完了: ${this.currentMapType}`);
             return true;
-          }
+          }*/
           
           // 生成したマップをTopDownMapに設定
           this.topDownMap.setMapData(mapData);
           
           // オブジェクトを配置
-          this.topDownMap.placeObjects();
+          //this.topDownMap.placeObjects();
           
-          console.log(`Map generated: ${this.currentMapType}`);
+          // マップの境界をカメラに設定
+          /*if (this.topDownMap.map) {
+            const mapWidthInPixels = this.topDownMap.width * this.topDownMap.tileSize;
+            const mapHeightInPixels = this.topDownMap.height * this.topDownMap.tileSize;
+            this.cameras.main.setBounds(0, 0, mapWidthInPixels, mapHeightInPixels);
+          }*/
+          
+          console.log(`Map generated: ${this.currentMapType}, Size: ${this.topDownMap.width}x${this.topDownMap.height}`);
           
           return true;
         } catch (error) {
@@ -1057,7 +1203,7 @@ export default class MainScene {
     MainScene.instance = MainSceneImpl;
     return MainSceneImpl;
   }
-  
+
   /**
    * シーンのインスタンス化
    * initialize()が事前に呼ばれている必要がある

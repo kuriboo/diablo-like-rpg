@@ -15,7 +15,7 @@ export default class Player extends Character {
     this.potionRegenerationValue = config.potionRegenerationValue || 30;
     
     // 移動速度を調整 (値を大きくして移動を速く)
-    this.moveSpeed = config.moveSpeed || 200; // 元の値より大きく設定
+    this.moveSpeed = config.moveSpeed || 2000; // 元の値より大きく設定
     
     // アクション関連
     this.basicActions = {}; // 基本アクション

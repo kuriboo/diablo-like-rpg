@@ -259,13 +259,6 @@ class AssetManager {
       SimplePlaceholderAssets.initialize(scene);
     }
     
-    // AudioPlaceholdersの初期化
-    if (AudioPlaceholders && typeof AudioPlaceholders.initialize === 'function') {
-      AudioPlaceholders.setDebugMode(true);
-      AudioPlaceholders.initialize(scene);
-      this.placeholders.audio = AudioPlaceholders;
-    }
-    
     this.placeholders.initialized = true;
     console.log('AssetManager: プレースホルダーの初期化が完了しました');
   }
@@ -560,7 +553,7 @@ class AssetManager {
   getPlaceholderSound(type, subtype, key) {
     if (!this.scene || !isDebugMode || !this.placeholders.audio) return null;
     
-    const AudioPlaceholders = this.placeholders.audio;
+    //const AudioPlaceholders = this.placeholders.audio;
     
     // キーが存在するか確認
     if (this.scene.cache.audio && this.scene.cache.audio.exists(key)) {
@@ -568,13 +561,13 @@ class AssetManager {
     }
     
     // AudioPlaceholdersを使用してプレースホルダーを作成
-    console.log(`🎵 プレースホルダーサウンド作成: ${key} (${type}/${subtype})`);
+    /*console.log(`🎵 プレースホルダーサウンド作成: ${key} (${type}/${subtype})`);
     
     if (type === 'bgm') {
       AudioPlaceholders.addBgmPlaceholder(this.scene, key);
     } else {
       AudioPlaceholders.addSfxPlaceholder(this.scene, key, subtype);
-    }
+    }*/
     
     // 作成後、キーを登録
     this.registerAudio(key);
