@@ -22,14 +22,14 @@ class MapGenerator {
       width: 100, // マップの幅
       height: 100, // マップの高さ
       seed: Math.random(), // 乱数シード
-      tileSize: 64, // タイルサイズ
+      tileSize: 32, // タイルサイズ
       noiseScale: 0.1, // ノイズスケール
       roomMinSize: 5, // 部屋の最小サイズ
       roomMaxSize: 15, // 部屋の最大サイズ
       roomCount: 10, // 部屋の数
       enemyDensity: 0.05, // 敵の密度
       chestDensity: 0.02, // 宝箱の密度
-      obstacleDensity: 0.1, // 障害物の密度
+      obstacleDensity: 0.003, // 障害物の密度
       npcDensity: 0.01, // NPCの密度
       difficultyLevel: 'normal', // 難易度: normal, nightmare, hell
       ...options
@@ -411,9 +411,9 @@ class MapGenerator {
       for (let x = 0; x < width; x++) {
         // 部屋や通路は平らに、壁は高くする
         if (this.objectPlacement[y][x] === 0) {
-          // 部屋や通路には微妙な凹凸を追加
+          // 部屋や通路には微妙な凹凸を追加 - 常に0.3以上に
           const noise = this.noise2D(x * noiseScale * 0.5, y * noiseScale * 0.5) * 0.1;
-          this.heightMap[y][x] = 0.2 + noise;
+          this.heightMap[y][x] = 0.4 + noise; // 0.3ではなく0.4から始めて安全マージンを確保
         } else if (this.objectPlacement[y][x] === 3) {
           // 壁は高くする
           const noise = this.noise2D(x * noiseScale, y * noiseScale) * 0.2;
@@ -445,8 +445,8 @@ class MapGenerator {
         
         // 地形の高さに基づいてオブジェクト配置を設定
         if (this.heightMap[y][x] < 0.3) {
-          // 低地（水域など）
-          this.objectPlacement[y][x] = 0; // 移動可能な低地
+          // 低地（水域など）- 移動不可能
+          this.objectPlacement[y][x] = 3; // 移動不可能な障害物として設定
         } else if (this.heightMap[y][x] > 0.75) {
           // 高地（山や丘など）
           this.objectPlacement[y][x] = 3; // 移動不可能な障害物
@@ -549,16 +549,11 @@ class MapGenerator {
           const distance = Math.sqrt(((x - centerX) ** 2) / 1.5 + (y - centerY) ** 2);
           if (distance <= size) {
             // 湖の中心に近いほど深くなる
-            const depth = 0.3 - (0.3 * distance / size);
+            const depth = 0.2 - (0.1 * distance / size); // 最大深度を0.2に設定
             this.heightMap[y][x] = depth;
             
-            // 湖は移動不可
+            // 湖は全て移動不可
             this.objectPlacement[y][x] = 3;
-            
-            // 湖の淵は移動可能に
-            if (distance > size * 0.8) {
-              this.objectPlacement[y][x] = 0;
-            }
           }
         }
       }
@@ -1110,7 +1105,8 @@ class MapGenerator {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         // 移動可能なスペースのみにオブジェクトを配置
-        if (this.objectPlacement[y][x] === 0) {
+        // 高さが0.3未満（水や溶岩）の場所にはオブジェクトを配置しない
+        if (this.objectPlacement[y][x] === 0 && this.heightMap[y][x] >= 0.3) {
           // 宝箱を配置
           if (this.rng() < adjustedChestDensity) {
             this.objectPlacement[y][x] = 2; // 宝箱
@@ -1134,6 +1130,11 @@ class MapGenerator {
   placeMapSpecificObstacle(x, y, mapType) {
     const { width, height } = this.options;
     
+    // 既に通行不可能なタイルには障害物を配置しない
+    if (this.heightMap[y][x] < 0.3) {
+      return;
+    }
+    
     // デフォルトは通常の障害物
     let obstacleType = 3; // 壁/障害物
     
@@ -1142,22 +1143,22 @@ class MapGenerator {
       case 'dungeon':
         // ダンジョンの障害物（落石、破壊された柱など）
         obstacleType = 3;
-        this.heightMap[y][x] = 0.6 + this.rng() * 0.2;
+        this.heightMap[y][x] = Math.max(0.3, this.heightMap[y][x]); // 最低でも0.3以上に
         break;
       case 'field':
         // フィールドの障害物（岩、低木など）
         obstacleType = 3;
-        this.heightMap[y][x] = 0.5 + this.rng() * 0.3;
+        this.heightMap[y][x] = Math.max(0.3, this.heightMap[y][x]); // 最低でも0.3以上に
         break;
       case 'arena':
         // アリーナの障害物（壊れた武器、盾など）
         obstacleType = 3;
-        this.heightMap[y][x] = 0.5 + this.rng() * 0.1;
+        this.heightMap[y][x] = Math.max(0.3, this.heightMap[y][x]); // 最低でも0.3以上に
         break;
       case 'town':
         // 町の障害物（樽、荷車など）
         obstacleType = 3;
-        this.heightMap[y][x] = 0.5 + this.rng() * 0.1;
+        this.heightMap[y][x] = Math.max(0.3, this.heightMap[y][x]); // 最低でも0.3以上に
         break;
     }
     
@@ -1199,8 +1200,8 @@ class MapGenerator {
     
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        // 移動可能なスペースのみに敵を配置
-        if (this.objectPlacement[y][x] === 0) {
+        // 移動可能なスペースのみに敵を配置（高さも考慮）
+        if (this.objectPlacement[y][x] === 0 && this.heightMap[y][x] >= 0.3) {
           // 敵を配置できる場所を候補に追加
           candidatePositions.push({ x, y });
         }
@@ -1236,6 +1237,8 @@ class MapGenerator {
     // グループでの敵配置（複数の敵が近くに集まる）
     this.placeEnemyGroups(mapType, difficultyLevel, candidatePositions);
   }
+
+        
 
   /**
    * アリーナ用の敵を配置（ボスなど）

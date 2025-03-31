@@ -843,7 +843,7 @@ export default class BasicAction extends Action {
    */
   moveTowards(position, delta, speedMultiplier = 1.0) {
     if (!this.owner || !position) return;
-    
+  
     // 方向ベクトルを計算
     const dx = position.x - this.owner.x;
     const dy = position.y - this.owner.y;
@@ -855,11 +855,12 @@ export default class BasicAction extends Action {
     const dirX = dx / length;
     const dirY = dy / length;
     
-    // 移動速度
-    const speed = this.moveSpeed * speedMultiplier;
-    
+    // 移動速度 
+    let speed = this.moveSpeed * speedMultiplier;
+
     // 移動距離を計算
-    const moveDistance = speed * delta / 1000; // 秒単位に変換
+    const scalingFactor = this.owner.constructor.name === 'Player' ? 10 : 2;
+    const moveDistance = speed * scalingFactor * delta / 1000;
     
     // 新しい位置を計算
     const newX = this.owner.x + dirX * moveDistance;

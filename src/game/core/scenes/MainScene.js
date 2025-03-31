@@ -43,6 +43,7 @@ import AssetManager from '../AssetManager';
 
 // ActionSystemのインポート
 import ActionSystem from '../../actions/ActionSystem';
+import MapLoader from '../../../debug/MapLoader';
 
 /**
  * マップデータの妥当性をチェックする関数
@@ -239,6 +240,9 @@ export default class MainScene {
         
         // ActionSystemを初期化
         this.actionSystem.initialize(this);
+
+        // MapLoaderを明示的に初期化
+        MapLoader.initialize(this);
         
         // マップジェネレーターの作成（そのまま）
         this.mapGenerator = new MapGenerator({
@@ -279,12 +283,6 @@ export default class MainScene {
         
         // ゲーム開始イベント
         this.events.emit('game-started', this.gameData);
-
-        // MainScene.js内のマップ生成前に追加
-        /*if (!validateMapData(this.topDownMap.mapData)) {
-          // データに問題がある場合、デフォルトのマップデータを生成
-          this.topDownMap.setMapData( createDefaultMapData() );
-        }*/
         
          // デバッグモードの初期化
         if (this.isDebugMode) {
@@ -407,27 +405,12 @@ export default class MainScene {
           
           // マップを生成
           const mapData = await this.mapGenerator.generateMap(this.currentMapType);
-      
-          // マップ生成に失敗した場合や開発中の場合はダミーマップを使用
-          /*if (!mapData && this.isDebugMode) {
-            console.log('🗺️ ダミーマップを生成します');
-            
-            // DebugUtilsのgenerateMapData関数を使用
-            const dummyMapData = generateMapData(80, 100, this.currentMapType);
-            this.topDownMap.setMapData(dummyMapData);
-            
-            // オブジェクトを配置
-            this.topDownMap.placeObjects();
-            
-            console.log(`🗺️ ダミーマップ生成完了: ${this.currentMapType}`);
-            return true;
-          }*/
           
           // 生成したマップをTopDownMapに設定
           this.topDownMap.setMapData(mapData);
           
           // オブジェクトを配置
-          //this.topDownMap.placeObjects();
+          this.topDownMap.placeObjects();
           
           // マップの境界をカメラに設定
           /*if (this.topDownMap.map) {

@@ -15,8 +15,9 @@ export default class Player extends Character {
     this.potionRegenerationValue = config.potionRegenerationValue || 30;
     
     // 移動速度を調整 (値を大きくして移動を速く)
-    this.moveSpeed = config.moveSpeed || 2000; // 元の値より大きく設定
-    
+    //this.moveSpeed = config.moveSpeed || 2000; // 元の値より大きく設定
+    this.moveSpeed = 2000; // 元の値より大きく設定
+
     // アクション関連
     this.basicActions = {}; // 基本アクション
     this.specialActions = new Map(); // 特殊アクション
@@ -233,7 +234,7 @@ export default class Player extends Character {
       // クリック位置をタイル座標に変換
       const tileXY = this.scene.topDownMap.worldToTileXY(worldPoint.x, worldPoint.y);
       
-      // 移動可能かチェック
+      // 移動可能かチェック - 水や溶岩も考慮
       if (this.scene.topDownMap.isWalkableAt(tileXY.x, tileXY.y)) {
         // プレイヤーの現在位置をタイル座標で取得
         const playerTileXY = this.scene.topDownMap.worldToTileXY(this.x, this.y);
@@ -261,13 +262,17 @@ export default class Player extends Character {
           });
           
           this.actionSystem.queueAction(moveAction, true);
+          return; // 成功したので終了
+        } else {
+          console.log('経路が見つかりませんでした');
         }
+      } else {
+        console.log(`タイル(${tileXY.x}, ${tileXY.y})は移動不可です`);
       }
     }
-    // ActionSystemがない場合は直接移動
-    else {
-      this.setMoveTarget(worldPoint.x, worldPoint.y);
-    }
+    
+    // ActionSystemでの移動に失敗した場合や、ActionSystemがない場合は直接移動
+    this.setMoveTarget(worldPoint.x, worldPoint.y);
   }
   
   /**
@@ -464,8 +469,11 @@ export default class Player extends Character {
     let dx = 0;
     let dy = 0;
     
-    // 現在の移動速度を計算
-    const normalizedSpeed = this.moveSpeed * (delta / 1000);
+    // 重要な修正: 現在の移動速度を計算 - 元の式から修正
+    // 1000で割ると秒単位になるので、moveSpeedが一定以上の値でないと動きが遅くなる
+    // 例えば200の場合、delta=16.6msとすると、1フレームでの移動は約3.32ピクセル
+    const scalingFactor = 10; // 調整可能な値
+    const normalizedSpeed = this.moveSpeed * scalingFactor * (delta / 1000);
     
     // キー入力に基づいて方向を決定
     if (this.cursors.up.isDown || this.keys.up.isDown) {
