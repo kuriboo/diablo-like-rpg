@@ -1,7 +1,7 @@
 /**
  * MapLoader.js - PlaceholderAssetsとの連携を強化したマップローダー
  * 
- * 障害物タイプ（tree, rock, bush, crate）やタイルの通行可能性を考慮して
+ * 障害物タイプ（tree, rock, bush, crate）や壁タイプ、タイルの通行可能性を考慮して
  * TopDownMapが利用できるように変換する機能を提供します。
  */
 
@@ -38,7 +38,14 @@ class MapLoader {
       'obstacle_tree': 2,
       'obstacle_rock': 3,
       'obstacle_bush': 4,
-      'obstacle_crate': 5
+      'obstacle_crate': 5,
+
+      // 壁タイル（新しく追加）
+      'wall_stone': 0,
+      'wall_brick': 1,
+      'wall_wood': 2,
+      'wall_ice': 3,
+      'wall_metal': 4
     };
     
     // タイルの通行可能性マッピング（true: 通行可能, false: 通行不可）
@@ -55,13 +62,19 @@ class MapLoader {
       'obstacle_tree': false,
       'obstacle_rock': false,
       'obstacle_bush': false,
-      'obstacle_crate': false
+      'obstacle_crate': false,
+      'wall_stone': false, // 壁はすべて通行不可
+      'wall_brick': false,
+      'wall_wood': false,
+      'wall_ice': false,
+      'wall_metal': false
     };
     
     // 生成されたタイルセットの情報
     this.tilesets = {
       terrain: null,
-      objects: null
+      objects: null,
+      walls: null  // 壁タイルセットを追加
     };
   }
   
@@ -128,20 +141,43 @@ class MapLoader {
       'obstacle_rock', 'obstacle_bush', 'obstacle_crate'
     ];
     
-    // 不足しているタイルをPlaceholderAssetsで生成
-    this.ensureTilesExist(terrainTiles.concat(objectTiles));
+    // 壁タイルを追加
+    const wallTiles = [
+      'wall_stone', 'wall_brick', 'wall_wood', 
+      'wall_ice', 'wall_metal'
+    ];
     
-    // タイルセットを生成
-    this.tilesets = TilesetGenerator.generateAllTilesets({
-      terrain: {
-        tileKeys: terrainTiles,
-        outputKey: 'tileset_terrain'
-      },
-      objects: {
-        tileKeys: objectTiles,
-        outputKey: 'tileset_objects'
-      }
+    // 不足しているタイルをPlaceholderAssetsで生成
+    this.ensureTilesExist(terrainTiles.concat(objectTiles).concat(wallTiles));
+    
+    // タイルセットを生成 - 既存のTilesetGeneratorの柔軟性を活用
+    const tilesets = {};
+    
+    // 既存の地形タイルセット生成
+    tilesets.terrain = TilesetGenerator.generateTerrainTileset({
+      tileKeys: terrainTiles,
+      outputKey: 'tileset_terrain'
     });
+    
+    // 既存のオブジェクトタイルセット生成
+    tilesets.objects = TilesetGenerator.generateObjectTileset({
+      tileKeys: objectTiles,
+      outputKey: 'tileset_objects'
+    });
+    
+    // 壁タイルセット生成 - オブジェクトタイルセット生成と同様の方法で
+    tilesets.walls = TilesetGenerator.generateObjectTileset({
+      tileKeys: wallTiles,
+      outputKey: 'tileset_walls',
+      columns: 3  // 適切な列数を指定
+    });
+    
+    // タイルセット情報を整理
+    this.tilesets = {
+      terrain: TilesetGenerator.getTilesetInfo('tileset_terrain'),
+      objects: TilesetGenerator.getTilesetInfo('tileset_objects'),
+      walls: TilesetGenerator.getTilesetInfo('tileset_walls')
+    };
     
     console.log('✅ タイルセット準備完了');
     return this.tilesets;
@@ -165,6 +201,10 @@ class MapLoader {
         } else if (key.startsWith('obstacle_')) {
           const obstacleType = key.replace('obstacle_', '');
           PlaceholderAssets.createObstacle(this.scene, key, this.getObstacleColor(obstacleType));
+        } else if (key.startsWith('wall_')) {
+          // 壁タイルの生成
+          const wallType = key.replace('wall_', '');
+          PlaceholderAssets.createWallTile(this.scene, key, this.getWallColor(wallType), wallType);
         }
         
         console.log(`✅ タイル ${key} を生成しました`);
@@ -207,6 +247,23 @@ class MapLoader {
     
     return obstacleColors[obstacleType] || 0x8B4513;
   }
+
+  /**
+   * 壁タイプから色を取得（新規追加）
+   * @param {string} wallType - 壁タイプ
+   * @returns {number} 色（16進数）
+   */
+  getWallColor(wallType) {
+    const wallColors = {
+      'stone': 0x808080,   // 灰色
+      'brick': 0xB22222,   // 煉瓦色
+      'wood': 0x8B4513,    // 茶色
+      'ice': 0xADD8E6,     // 薄い青
+      'metal': 0x696969    // 暗い灰色
+    };
+    
+    return wallColors[wallType] || 0x808080;
+  }
   
   /**
    * TopDownMap用にマップデータを準備
@@ -214,7 +271,7 @@ class MapLoader {
    * @returns {Object} 変換されたマップデータ
    */
   prepareMapData(mapData) {
-    if (!this.tilesets.terrain || !this.tilesets.objects) {
+    if (!this.tilesets.terrain || !this.tilesets.objects || !this.tilesets.walls) {
       this.prepareTilesets();
     }
     
@@ -249,14 +306,14 @@ class MapLoader {
     console.log('🔄 高さマップを通行可能性に基づいて調整中...');
     
     // 高さマップを走査
-    for (let y = 0; y < mapData.height; y++) {
-      for (let x = 0; x < mapData.width; x++) {
+    for (let x = 0; x < mapData.width; x++) {
+      for (let y = 0; y < mapData.height; y++) {
         // 高さが0.3未満のエリア（水や溶岩）は通行不可
-        if (mapData.heightMap[y][x] < 0.3) {
+        if (mapData.heightMap[x][y] < 0.3) {
           // objectPlacementを3（通行不可）に設定
           // MapGeneratorの値を尊重する場合は条件を調整
-          if (mapData.objectPlacement[y][x] === 0) {
-            mapData.objectPlacement[y][x] = 3;
+          if (mapData.objectPlacement[x][y] === 0) {
+            mapData.objectPlacement[x][y] = 3;
           }
         }
       }
@@ -280,7 +337,7 @@ class MapLoader {
       this.initialize(topDownMap.scene);
     }
     
-    if (!this.tilesets.terrain || !this.tilesets.objects) {
+    if (!this.tilesets.terrain || !this.tilesets.objects || !this.tilesets.walls) {
       this.prepareTilesets();
     }
     
@@ -307,27 +364,37 @@ class MapLoader {
         };
       };
       
-      // オブジェクトタイプを障害物タイプに変換する関数を追加
+      // TopDownMapのgetObjectTexture関数を拡張して壁タイルをサポート
       topDownMap.getObjectTexture = (objectType) => {
+        // MapGeneratorのオブジェクトタイプコード：0=空き、2=宝箱、3=障害物、4=壁
         let tileKey;
+        let tilesetKey;
         
-        // MapGeneratorのオブジェクトタイプに基づいてタイルキーを決定
         switch (objectType) {
           case 2: // 宝箱
             tileKey = 'item_chest';
+            tilesetKey = this.tilesets.objects.key;
             break;
-          case 3: // 壁/障害物 - ランダムな障害物タイプを選択
-            const obstacleTypes = ['tile_wall', 'obstacle_tree', 'obstacle_rock', 'obstacle_bush', 'obstacle_crate'];
+          case 3: // 障害物
+            const obstacleTypes = ['obstacle_tree', 'obstacle_rock', 'obstacle_bush', 'obstacle_crate'];
             tileKey = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+            tilesetKey = this.tilesets.objects.key;
+            break;
+          case 4: // 壁 - 新しい壁タイルセットを使用
+            const wallTypes = ['wall_stone', 'wall_brick', 'wall_wood', 'wall_ice', 'wall_metal'];
+            tileKey = wallTypes[Math.floor(Math.random() * wallTypes.length)];
+            tilesetKey = this.tilesets.walls.key; // 壁専用タイルセットを使用
             break;
           default:
             return null;
         }
         
-        // 統合タイルセット内のインデックスを取得
+        // タイルキーからインデックスを取得
+        const tileIndex = this.tileMapping[tileKey] || 0;
+        
         return {
-          key: this.tilesets.objects.objects,
-          index: this.tileMapping[tileKey] || 0
+          key: tilesetKey,
+          index: tileIndex
         };
       };
       
@@ -353,8 +420,17 @@ class MapLoader {
       }
       
       // 高さマップで通行不可を判定（水や溶岩）
-      if (this.mapData && this.mapData.heightMap && this.mapData.heightMap[tileY][tileX] < 0.3) {
+      if (this.mapData && this.mapData.heightMap && this.mapData.heightMap[tileX][tileY] < 0.3) {
         return false;
+      }
+      
+      // マップデータで通行不可を判定（障害物や壁）
+      if (this.mapData && this.mapData.objectPlacement) {
+        const objectType = this.mapData.objectPlacement[tileX][tileY];
+        // 障害物(3)または壁(4)は通行不可
+        if (objectType === 3 || objectType === 4) {
+          return false;
+        }
       }
       
       // 元のメソッドを呼び出す
@@ -364,7 +440,7 @@ class MapLoader {
   
   /**
    * 統合タイルセットで生成されたタイルインデックスをもとのキーに戻す
-   * @param {string} tilesetType - タイルセットタイプ ('terrain' または 'objects')
+   * @param {string} tilesetType - タイルセットタイプ ('terrain', 'objects', または 'walls')
    * @param {number} index - タイルインデックス
    * @returns {string} 元のタイルキー
    */
@@ -374,7 +450,9 @@ class MapLoader {
     for (const [key, value] of Object.entries(mapping)) {
       if (tilesetType === 'terrain' && key.startsWith('tile_') && !key.includes('wall') && value === index) {
         return key;
-      } else if (tilesetType === 'objects' && !key.startsWith('tile_grass') && value === index) {
+      } else if (tilesetType === 'objects' && !key.startsWith('tile_grass') && !key.startsWith('wall_') && value === index) {
+        return key;
+      } else if (tilesetType === 'walls' && key.startsWith('wall_') && value === index) {
         return key;
       }
     }
@@ -388,14 +466,18 @@ class MapLoader {
    * @returns {string} 障害物タイプ
    */
   convertObjectTypeToObstacleType(objectTypeCode) {
-    // MapGeneratorの値：0=空きスペース、2=宝箱、3=壁/障害物
+    // MapGeneratorの値：0=空きスペース、2=宝箱、3=障害物、4=壁
     switch (objectTypeCode) {
       case 2:
         return 'item_chest';
       case 3:
         // ランダムな障害物タイプを選択
-        const obstacleTypes = ['tile_wall', 'obstacle_tree', 'obstacle_rock', 'obstacle_bush', 'obstacle_crate'];
+        const obstacleTypes = ['obstacle_tree', 'obstacle_rock', 'obstacle_bush', 'obstacle_crate'];
         return obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+      case 4:
+        // ランダムな壁タイプを選択 - 新規追加
+        const wallTypes = ['wall_stone', 'wall_brick', 'wall_wood', 'wall_ice', 'wall_metal'];
+        return wallTypes[Math.floor(Math.random() * wallTypes.length)];
       default:
         return null; // 空きスペース
     }
@@ -421,7 +503,8 @@ class MapLoader {
   clearAll() {
     this.tilesets = {
       terrain: null,
-      objects: null
+      objects: null,
+      walls: null
     };
     
     this.initialized = false;

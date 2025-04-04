@@ -70,6 +70,15 @@ class PlaceholderAssets {
         { key: 'item_chest', color: 0x8B4513 }
       ];
       
+      // 壁タイルタイプ - 新規追加
+      const wallTiles = [
+        { key: 'wall_stone', color: 0x808080, type: 'stone' },
+        { key: 'wall_brick', color: 0xB22222, type: 'brick' },
+        { key: 'wall_wood', color: 0x8B4513, type: 'wood' },
+        { key: 'wall_ice', color: 0xADD8E6, type: 'ice' },
+        { key: 'wall_metal', color: 0x696969, type: 'metal' }
+      ];
+      
       // 各タイルのプレースホルダーを作成
       requiredTiles.forEach(tile => {
         try {
@@ -88,6 +97,19 @@ class PlaceholderAssets {
           console.log(`代替プレースホルダー作成: ${tile.key}`);
         }
       });
+      
+      // 壁タイルのプレースホルダーを作成
+      wallTiles.forEach(wall => {
+        try {
+          this.createWallTile(scene, wall.key, wall.color, wall.type);
+          console.log(`壁タイルプレースホルダー作成: ${wall.key} (${wall.type})`);
+        } catch (e) {
+          console.warn(`壁タイルプレースホルダー ${wall.key} の作成中にエラーが発生しました:`, e);
+          // エラーが発生した場合、シンプルな色付き矩形で代用
+          this.createColorRect(scene, wall.key, 32, 32, wall.color);
+          console.log(`代替壁タイルプレースホルダー作成: ${wall.key}`);
+        }
+      });
     }
 
     /**
@@ -102,7 +124,8 @@ class PlaceholderAssets {
         'tile_grass': 0x3CB371,
         'tile_stone': 0x708090,
         'item_chest': 0x8B4513,
-        'character_placeholder': 0x00FF00
+        'character_placeholder': 0x00FF00,
+        'wall_stone': 0x808080  // 壁のフォールバックも追加
       };
       
       // シンプルな色付き矩形を作成
@@ -521,7 +544,7 @@ class PlaceholderAssets {
         this.placeholders[key] = { type: 'tile', color, width: tileSize, height: tileSize };
         
         // 登録確認ログ
-        console.log(`Created tile placeholder: ${key}`);
+        //console.log(`Created tile placeholder: ${key}`);
       } catch (e) {
         console.error(`タイルプレースホルダー ${key} の作成中にエラーが発生しました:`, e);
         
@@ -565,55 +588,318 @@ class PlaceholderAssets {
     }
 
     /**
-     * 壁タイルのプレースホルダー作成 - TopDownMap用に調整
+     * 壁タイルのプレースホルダー作成 - 拡張版（様々な壁タイプに対応）
      * @param {Phaser.Scene} scene - Phaserシーン
      * @param {string} key - テクスチャーキー
      * @param {number} color - 色（16進数）
+     * @param {string} wallType - 壁のタイプ ('stone', 'brick', 'wood', 'ice', 'metal')
      */
-    createWallTile(scene, key, color) {
-      const graphics = scene.add.graphics();
-      const tileSize = 32; // TopDownMapのデフォルトタイルサイズ
+    createWallTile(scene, key, color, wallType = 'stone') {
+      if (!scene || !scene.add) {
+        console.warn(`シーンが無効なため ${key} を作成できません`);
+        return;
+      }
       
-      // 背景色
-      graphics.fillStyle(color, 1);
-      graphics.fillRect(0, 0, tileSize, tileSize);
-      
-      // レンガ模様
-      const brickLight = brightenColor(color, 20);
-      const brickDark = darkenColor(color, 20);
-      
-      // 横のレンガライン
-      for (let y = 0; y < tileSize; y += 8) {
-        graphics.fillStyle(brickDark, 0.5);
-        graphics.fillRect(0, y, tileSize, 1);
+      try {
+        const graphics = scene.add.graphics();
+        const tileSize = 32; // TopDownMapのデフォルトタイルサイズ
         
-        // 縦のレンガライン（交互に配置）
-        const offset = (y / 8) % 2 === 0 ? 0 : 16;
-        for (let x = offset; x < tileSize; x += 16) {
-          graphics.fillStyle(brickDark, 0.5);
-          graphics.fillRect(x, y, 1, 8);
+        // 背景色を塗る
+        graphics.fillStyle(color, 1);
+        graphics.fillRect(0, 0, tileSize, tileSize);
+        
+        // 壁のタイプに応じてパターンを変更
+        switch (wallType) {
+          case 'brick':
+            // レンガ壁パターン
+            this.createBrickWallPattern(graphics, color, tileSize);
+            break;
+          case 'wood':
+            // 木製壁パターン
+            this.createWoodenWallPattern(graphics, color, tileSize);
+            break;
+          case 'ice':
+            // 氷の壁パターン
+            this.createIceWallPattern(graphics, color, tileSize);
+            break;
+          case 'metal':
+            // 金属壁パターン
+            this.createMetalWallPattern(graphics, color, tileSize);
+            break;
+          case 'stone':
+          default:
+            // 石壁パターン（デフォルト）
+            this.createStoneWallPattern(graphics, color, tileSize);
+            break;
         }
         
-        // レンガのハイライト
-        graphics.fillStyle(brickLight, 0.3);
+        // 枠線
+        graphics.lineStyle(1, darkenColor(color, 30), 0.8);
+        graphics.strokeRect(0, 0, tileSize, tileSize);
+        
+        // テクスチャとして生成して登録
+        graphics.generateTexture(key, tileSize, tileSize);
+        graphics.destroy();
+        
+        // プレースホルダー一覧に追加
+        this.placeholders[key] = { type: 'wall', wallType, color, width: tileSize, height: tileSize };
+        
+        // 登録確認ログ
+        console.log(`Created wall placeholder: ${key} (${wallType})`);
+      } catch (e) {
+        console.error(`壁プレースホルダー ${key} の作成中にエラーが発生しました:`, e);
+        
+        // エラーが発生した場合、より単純な方法でプレースホルダーを作成
+        try {
+          this.createColorRect(scene, key, 32, 32, color);
+          console.log(`Fallback colorRect created for ${key}`);
+        } catch (innerError) {
+          console.error(`代替プレースホルダーの作成にも失敗しました:`, innerError);
+        }
+      }
+    }
+
+    /**
+     * レンガ壁パターンの作成
+     * @param {Phaser.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - ベースカラー
+     * @param {number} tileSize - タイルサイズ
+     */
+    createBrickWallPattern(graphics, color, tileSize) {
+      const brickLight = brightenColor(color, 15);
+      const brickDark = darkenColor(color, 25);
+      
+      // レンガの行を描画
+      for (let y = 0; y < tileSize; y += 8) {
+        // レンガの横の線（各レンガの区切り）
+        graphics.lineStyle(1, brickDark, 0.7);
+        graphics.lineBetween(0, y, tileSize, y);
+        
+        // レンガの縦の線（交互にずらす）
+        const offset = (y / 8) % 2 === 0 ? 0 : 8;
+        
         for (let x = offset; x < tileSize; x += 16) {
-          graphics.fillRect(x + 1, y + 1, 15, 6);
+          graphics.lineBetween(x, y, x, y + 8);
+        }
+        
+        // レンガの表面テクスチャ（薄い色のランダムな斑点）
+        graphics.fillStyle(brickLight, 0.2);
+        for (let brick = 0; brick < tileSize / 16; brick++) {
+          const brickX = offset + brick * 16;
+          for (let i = 0; i < 3; i++) {
+            const spotX = brickX + 2 + Math.floor(Math.random() * 12);
+            const spotY = y + 2 + Math.floor(Math.random() * 4);
+            const spotSize = 1 + Math.random() * 1.5;
+            graphics.fillCircle(spotX, spotY, spotSize);
+          }
+        }
+      }
+    }
+
+    /**
+     * 木製壁パターンの作成
+     * @param {Phaser.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - ベースカラー
+     * @param {number} tileSize - タイルサイズ
+     */
+    createWoodenWallPattern(graphics, color, tileSize) {
+      const woodLight = brightenColor(color, 10);
+      const woodDark = darkenColor(color, 20);
+      
+      // 縦板のパターン
+      for (let x = 2; x < tileSize; x += 6) {
+        // 板の描画
+        graphics.fillStyle(woodDark, 0.2);
+        graphics.fillRect(x, 0, 4, tileSize);
+        
+        // 木目の描画
+        graphics.lineStyle(1, woodDark, 0.3);
+        for (let y = 0; y < tileSize; y += 5) {
+          const knotY = y + Math.floor(Math.random() * 5);
+          // 木目の節を描画
+          if (Math.random() < 0.3) {
+            graphics.fillStyle(woodDark, 0.4);
+            graphics.fillCircle(x + 2, knotY, 1.5);
+            graphics.fillStyle(woodLight, 0.2);
+            graphics.fillCircle(x + 2, knotY, 0.5);
+          }
+          
+          // 木目の線
+          graphics.lineStyle(1, woodDark, 0.2);
+          const lineY = y + Math.floor(Math.random() * 5);
+          graphics.lineBetween(x, lineY, x + 4, lineY);
         }
       }
       
-      // 枠線
-      graphics.lineStyle(1, darkenColor(color, 30), 0.8);
-      graphics.strokeRect(0, 0, tileSize, tileSize);
+      // 横方向の梁 - 上下に配置
+      graphics.fillStyle(woodDark, 0.5);
+      graphics.fillRect(0, 0, tileSize, 3);
+      graphics.fillRect(0, tileSize - 3, tileSize, 3);
+    }
+
+    /**
+     * 氷の壁パターンの作成（続き）
+     * @param {Phaser.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - ベースカラー
+     * @param {number} tileSize - タイルサイズ
+     */
+    createIceWallPattern(graphics, color, tileSize) {
+      const iceLight = brightenColor(color, 30);
+      const iceDark = darkenColor(color, 15);
       
-      // テクスチャとして生成して登録
-      graphics.generateTexture(key, tileSize, tileSize);
-      graphics.destroy();
+      // 氷の大きなブロック - 不規則な氷の割れ目パターン
+      // 主要な割れ目ライン
+      graphics.lineStyle(1, iceDark, 0.4);
       
-      // プレースホルダー一覧に追加
-      this.placeholders[key] = { type: 'wall', color, width: tileSize, height: tileSize };
+      // 中央を通る不規則な縦の割れ目
+      const centerX = tileSize / 2 + (Math.random() * 4 - 2);
+      graphics.beginPath();
+      graphics.moveTo(centerX, 0);
+      // うねうねした線を描画
+      for (let y = 0; y < tileSize; y += tileSize / 4) {
+        const controlX = centerX + (Math.random() * 8 - 4);
+        graphics.lineTo(controlX, y);
+      }
+      graphics.lineTo(centerX + (Math.random() * 4 - 2), tileSize);
+      graphics.strokePath();
       
-      // 登録確認ログ
-      console.log(`Created wall placeholder: ${key}`);
+      // 横方向の小さな割れ目をいくつか追加
+      for (let i = 0; i < 3; i++) {
+        const y = 4 + Math.random() * (tileSize - 8);
+        const startX = Math.random() * (tileSize / 2);
+        const length = 4 + Math.random() * (tileSize / 2);
+        
+        graphics.beginPath();
+        graphics.moveTo(startX, y);
+        graphics.lineTo(startX + length, y + (Math.random() * 4 - 2));
+        graphics.strokePath();
+      }
+      
+      // 反射/氷のきらめき効果
+      graphics.fillStyle(iceLight, 0.5);
+      for (let i = 0; i < 6; i++) {
+        const x = Math.random() * tileSize;
+        const y = Math.random() * tileSize;
+        const size = 1 + Math.random() * 2;
+        graphics.fillCircle(x, y, size);
+      }
+      
+      // より大きな反射エリア
+      graphics.fillStyle(iceLight, 0.2);
+      const reflectionX = Math.random() * (tileSize - 10) + 5;
+      const reflectionY = Math.random() * (tileSize - 10) + 5;
+      graphics.fillCircle(reflectionX, reflectionY, 4 + Math.random() * 3);
+    }
+
+    /**
+     * 金属壁パターンの作成
+     * @param {Phaser.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - ベースカラー
+     * @param {number} tileSize - タイルサイズ
+     */
+    createMetalWallPattern(graphics, color, tileSize) {
+      const metalLight = brightenColor(color, 25);
+      const metalDark = darkenColor(color, 15);
+      
+      // 金属パネルのベース
+      graphics.fillStyle(color, 1);
+      graphics.fillRect(0, 0, tileSize, tileSize);
+      
+      // 金属の質感 - 横方向のパネル
+      for (let y = 0; y < tileSize; y += 8) {
+        // パネルのエッジ
+        graphics.lineStyle(1, metalDark, 0.6);
+        graphics.lineBetween(0, y, tileSize, y);
+        
+        // パネルのハイライト（上部）
+        graphics.lineStyle(1, metalLight, 0.3);
+        graphics.lineBetween(0, y + 1, tileSize, y + 1);
+      }
+      
+      // 金属の質感 - リベット（ボルト）を追加
+      graphics.fillStyle(metalDark, 0.7);
+      for (let x = 4; x < tileSize; x += 8) {
+        for (let y = 4; y < tileSize; y += 8) {
+          // リベットの位置をランダムに調整
+          if (Math.random() < 0.7) { // 一部のリベットをスキップ
+            const offsetX = x + (Math.random() * 2 - 1);
+            const offsetY = y + (Math.random() * 2 - 1);
+            graphics.fillCircle(offsetX, offsetY, 1.5);
+            
+            // リベットのハイライト
+            graphics.fillStyle(metalLight, 0.4);
+            graphics.fillCircle(offsetX - 0.5, offsetY - 0.5, 0.5);
+            graphics.fillStyle(metalDark, 0.7);
+          }
+        }
+      }
+      
+      // スクラッチ（擦り傷）効果を追加
+      graphics.lineStyle(1, metalLight, 0.2);
+      for (let i = 0; i < 4; i++) {
+        const startX = Math.random() * tileSize;
+        const startY = Math.random() * tileSize;
+        const endX = startX + (Math.random() * 10 - 5);
+        const endY = startY + (Math.random() * 10 - 5);
+        graphics.lineBetween(startX, startY, endX, endY);
+      }
+    }
+
+    /**
+     * 石壁パターンの作成
+     * @param {Phaser.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - ベースカラー
+     * @param {number} tileSize - タイルサイズ
+     */
+    createStoneWallPattern(graphics, color, tileSize) {
+      const stoneLight = brightenColor(color, 15);
+      const stoneDark = darkenColor(color, 25);
+      
+      // 石の不規則なブロックを描画
+      const blockSizes = [6, 8, 10, 12];
+      
+      // 石ブロックのグリッドを作成
+      for (let y = 0; y < tileSize; y += 8) {
+        for (let x = 0; x < tileSize; x += 8) {
+          // 石ブロックの大きさをランダムに選択
+          const width = blockSizes[Math.floor(Math.random() * blockSizes.length)];
+          const height = blockSizes[Math.floor(Math.random() * blockSizes.length)];
+          
+          // ブロックの位置を少しランダムに調整
+          const offsetX = x + (Math.random() * 2 - 1);
+          const offsetY = y + (Math.random() * 2 - 1);
+          
+          // ブロックが画面外にはみ出さないように調整
+          const adjustedWidth = Math.min(width, tileSize - offsetX);
+          const adjustedHeight = Math.min(height, tileSize - offsetY);
+          
+          // ブロックの描画
+          if (adjustedWidth > 0 && adjustedHeight > 0) {
+            // 石ブロックの本体
+            graphics.fillStyle(stoneDark, 0.3);
+            graphics.fillRect(offsetX, offsetY, adjustedWidth, adjustedHeight);
+            
+            // ブロックのエッジ
+            graphics.lineStyle(1, stoneDark, 0.5);
+            graphics.strokeRect(offsetX, offsetY, adjustedWidth, adjustedHeight);
+            
+            // 石の質感（ランダムな斑点）
+            graphics.fillStyle(stoneLight, 0.2);
+            for (let i = 0; i < 3; i++) {
+              const spotX = offsetX + Math.random() * (adjustedWidth - 2) + 1;
+              const spotY = offsetY + Math.random() * (adjustedHeight - 2) + 1;
+              const spotSize = 0.5 + Math.random() * 1;
+              graphics.fillCircle(spotX, spotY, spotSize);
+            }
+          }
+        }
+      }
+      
+      // 全体に薄い陰影を追加して立体感を出す
+      graphics.fillStyle(stoneDark, 0.1);
+      graphics.fillTriangle(0, 0, tileSize, 0, 0, tileSize);
+      graphics.fillStyle(stoneLight, 0.1);
+      graphics.fillTriangle(tileSize, tileSize, tileSize, 0, 0, tileSize);
     }
 
     /**
@@ -1786,6 +2072,13 @@ class PlaceholderAssets {
             this.createChestItem(scene, key, 0x8B4513, false);
             return key;
           }
+        } else if (type === 'wall') {
+          if (!this.hasTexture(scene, key)) {
+            // 壁タイルのプレースホルダー生成
+            const wallColor = this.getWallColor(subtype);
+            this.createWallTile(scene, key, wallColor, subtype);
+            return key;
+          }
         } else {
           // その他の一般プレースホルダー
           const placeholderKey = `placeholder_${key}`;
@@ -1828,7 +2121,8 @@ class PlaceholderAssets {
         tile: 'tile_grass',
         item: 'item_chest',
         ui: 'ui_panel',
-        effect: 'effect_attack'
+        effect: 'effect_attack',
+        wall: 'wall_stone'  // 壁のフォールバックを追加
       };
       
       const key = fallbacks[type] || 'tile_grass';
@@ -1842,11 +2136,15 @@ class PlaceholderAssets {
             this.createTileWithPattern(scene, key, 0x3CB371); // 草色
           } else if (type === 'item' && key.includes('chest')) {
             this.createChestItem(scene, key, 0x8B4513, false);
+          } else if (type === 'wall') {
+            // 壁タイルのフォールバック
+            this.createWallTile(scene, key, 0x808080, 'stone');
           } else {
             // 汎用的な色のプレースホルダー
             const color = type === 'player' ? 0x00ff00 : 
                         type === 'enemy' ? 0xff0000 : 
                         type === 'npc' ? 0x0000ff : 
+                        type === 'wall' ? 0x808080 : 
                         0xffff00;
                         
             const size = type === 'item' ? 16 : 32;
@@ -1892,6 +2190,19 @@ class PlaceholderAssets {
       };
       
       return obstacleColors[obstacleType] || 0x8B4513;
+    }
+
+    // ヘルパー関数：壁タイプから色を取得 - 新規追加
+    getWallColor(wallType) {
+      const wallColors = {
+        stone: 0x808080,   // 灰色
+        brick: 0xB22222,   // 煉瓦色
+        wood: 0x8B4513,    // 茶色
+        ice: 0xADD8E6,     // 薄い青
+        metal: 0x696969    // 暗い灰色
+      };
+      
+      return wallColors[wallType] || 0x808080;
     }
 
     // シングルトンインスタンスを取得

@@ -26,8 +26,8 @@ async function getPhaserMath() {
   return phaser.Math || phaser.default.Math;
 }
 
-import TopDownMap from '.././../map/TopDownMap';
-import MapGenerator from '.././../map/MapGenerator';
+import TopDownMap from '../../map/TopDownMap';
+import MapGenerator from '../../map/generator';
 import CharacterFactory from '../../factories/CharacterFactory';
 import ItemFactory from '../../factories/ItemFactory';
 import ActionFactory from '../../factories/ActionFactory';
@@ -35,10 +35,8 @@ import SkillTreeManager from '../../skills/core/SkillTreeManager';
 import { PlayerStats } from '../../data/PlayerStats';
 import { Game } from '../../core/Game';
 import Debug from '../../../debug';
-import PlaceholderAssets from '../../../debug/PlaceholderAssets';
-import { generateMapData, generatePlayerStats, generateEnemyStats } from '../../../debug/DebugUtils';
+import { generatePlayerStats } from '../../../debug/DebugUtils';
 import { SCENES } from '../constants';
-import { getDistance } from '../../../utils/mathUtils';
 import AssetManager from '../AssetManager';
 
 // ActionSystemのインポート
