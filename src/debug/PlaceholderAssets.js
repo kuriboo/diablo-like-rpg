@@ -2164,6 +2164,2682 @@ class PlaceholderAssets {
       return key;
     }
 
+    /**
+     * PlaceholderAssets拡張 - CharacterAnimation.js
+     * 
+     * PlaceholderAssetsクラスに追加するキャラクターアニメーション生成機能を提供します。
+     * このコードをPlaceholderAssetsクラスに統合して使用します。
+     */
+
+    /**
+     * 以下はPlaceholderAssetsクラスに追加するメソッドです
+     */
+
+    /**
+     * キャラクターのスプライトシートを生成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} key - スプライトシートのキー
+     * @param {number} color - キャラクターの色
+     * @param {string} action - 動作タイプ
+     * @param {string} direction - 方向
+     * @param {number} frameCount - フレーム数
+     * @param {number} frameWidth - フレーム幅
+     * @param {number} frameHeight - フレーム高さ
+     */
+    createCharacterSpritesheet(scene, key, color, action, direction, frameCount, frameWidth, frameHeight) {
+      if (!scene || !scene.textures) {
+        console.warn(`シーンが無効なため ${key} を作成できません`);
+        return;
+      }
+      
+      // 既にテクスチャが存在する場合はスキップ
+      if (scene.textures.exists(key)) {
+        console.log(`スプライトシート ${key} は既に存在します`);
+        return;
+      }
+      
+      try {
+        console.log(`スプライトシート生成開始: ${key}`);
+        
+        // 統合されたキャンバスを作成（すべてのフレームを一つのテクスチャに）
+        const totalWidth = frameWidth * frameCount;
+        const canvas = document.createElement('canvas');
+        canvas.width = totalWidth;
+        canvas.height = frameHeight;
+        const ctx = canvas.getContext('2d');
+        
+        // 基本的な影の色（暗い色）
+        const shadowColor = darkenColor(color, 50);
+        
+        // 各フレームを描画
+        for (let frame = 0; frame < frameCount; frame++) {
+          const frameX = frame * frameWidth;
+          
+          // 動作と方向に基づいてキャラクターを描画
+          drawCharacterFrame(
+            ctx, 
+            color, 
+            action, 
+            direction, 
+            frame, 
+            frameX, 
+            0, 
+            frameWidth, 
+            frameHeight,
+            shadowColor
+          );
+        }
+        
+        // キャンバスをテクスチャとして登録
+        const texture = scene.textures.addCanvas(key, canvas);
+        
+        // スプライトシートの設定
+        scene.textures.get(key).add('0', 0, 0, 0, totalWidth, frameHeight, frameCount, frameWidth, frameHeight);
+        
+        console.log(`✅ スプライトシート生成完了: ${key} (${frameCount}フレーム)`);
+        
+        // プレースホルダー一覧に追加
+        this.placeholders[key] = { 
+          type: 'character_sheet', 
+          action, 
+          direction, 
+          frameCount, 
+          color, 
+          width: totalWidth, 
+          height: frameHeight 
+        };
+        
+      } catch (e) {
+        console.error(`スプライトシート ${key} の生成中にエラーが発生しました:`, e);
+        
+        // エラーが発生した場合、単一フレームの単色プレースホルダーを生成
+        this.createColorRect(scene, key, frameWidth, frameHeight, color);
+        
+        // 最低限のスプライトシート構造を設定
+        scene.textures.get(key).add('0', 0, 0, 0, frameWidth, frameHeight, frameCount, frameWidth, frameHeight);
+      }
+    }
+
+    /**
+     * 幽霊キャラクターを描画
+     * @param {Phaser.GameObjects.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - キャラクターの色
+     * @param {number} width - 幅
+     * @param {number} height - 高さ
+     * @param {string} variant - バリアント ('normal', 'wisp', 'phantom', 'shadow')
+     * @param {boolean} details - 詳細な描画を有効にするか
+     * @param {string} direction - 向き ('down', 'up', 'left', 'right')
+     * @param {boolean} animation - アニメーション風にするか
+     * @param {Object} customFeatures - カスタマイズオプション
+     */
+    drawGhostCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures = {}) {
+      // デフォルトのカスタマイズオプション
+      const defaults = {
+        transparency: 0.7,
+        eyeColor: 0x000000,
+        glowColor: brightenColor(color, 30),
+        hasTrail: true,
+        hasArms: variant !== 'wisp',
+        faceType: variant === 'shadow' ? 'scary' : 'normal', // 'normal', 'scary', 'cute'
+        trailCount: variant === 'phantom' ? 3 : 1
+      };
+      
+      const features = { ...defaults, ...customFeatures };
+      
+      // 基本的なサイズ計算
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      // 幽霊の体のサイズ
+      const bodyWidth = width * 0.4;
+      const bodyHeight = height * 0.4;
+      
+      // アニメーション効果（静止画でもわずかな動きを表現）
+      let animOffsetY = 0;
+      
+      if (animation) {
+        animOffsetY = Math.sin(Date.now() * 0.005) * 2;
+      }
+      
+      // バリアントごとの描画の違い
+      if (variant === 'wisp') {
+        // ウィスプは単純な光の球体
+        drawWispGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details);
+      } else if (variant === 'phantom') {
+        // ファントムは透明度が高く、残像あり
+        drawPhantomGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction);
+      } else if (variant === 'shadow') {
+        // シャドウは暗く、より怖い
+        drawShadowGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction);
+      } else {
+        // 通常の幽霊
+        drawNormalGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction);
+      }
+    }
+
+    /**
+     * ウィスプタイプの幽霊を描画
+     */
+    drawWispGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details) {
+      // 本体（光の球体）
+      graphics.fillStyle(color, features.transparency);
+      graphics.fillCircle(centerX, centerY + animOffsetY, bodyWidth * 0.6);
+      
+      // 内側の光る部分
+      graphics.fillStyle(features.glowColor, features.transparency * 0.8);
+      graphics.fillCircle(centerX, centerY + animOffsetY, bodyWidth * 0.4);
+      
+      // 外側のグロー効果
+      graphics.fillStyle(features.glowColor, features.transparency * 0.3);
+      graphics.fillCircle(centerX, centerY + animOffsetY, bodyWidth * 0.8);
+      
+      // 小さな光の粒子
+      if (details) {
+        graphics.fillStyle(0xFFFFFF, features.transparency * 0.9);
+        for (let i = 0; i < 5; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const distance = Math.random() * bodyWidth * 0.4;
+          const particleSize = 1 + Math.random() * 2;
+          
+          graphics.fillCircle(
+            centerX + Math.cos(angle) * distance,
+            centerY + animOffsetY + Math.sin(angle) * distance,
+            particleSize
+          );
+        }
+      }
+      
+      // 光の軌跡（あれば）
+      if (features.hasTrail) {
+        graphics.fillStyle(color, features.transparency * 0.5);
+        for (let i = 1; i <= features.trailCount; i++) {
+          const trailSize = bodyWidth * 0.6 * (1 - i * 0.2);
+          graphics.fillCircle(centerX, centerY + animOffsetY + i * 5, trailSize);
+        }
+      }
+    }
+
+    /**
+     * ファントムタイプの幽霊を描画
+     */
+    drawPhantomGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction) {
+      // 残像を先に描画
+      if (features.hasTrail) {
+        for (let i = 1; i <= features.trailCount; i++) {
+          const trailAlpha = features.transparency * (1 - i * 0.2);
+          const trailOffsetY = i * 5;
+          
+          // 残像の体
+          graphics.fillStyle(color, trailAlpha * 0.7);
+          drawGhostBody(graphics, centerX, centerY + trailOffsetY + animOffsetY, bodyWidth, bodyHeight, direction);
+          
+          // 残像の目と口（省略されたシンプルなバージョン）
+          if (details && direction !== 'up') {
+            graphics.fillStyle(0xFFFFFF, trailAlpha * 0.5);
+            const eyeSpacing = bodyWidth * 0.3;
+            const eyeSize = bodyWidth * 0.1;
+            
+            // 目
+            graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.2 + trailOffsetY + animOffsetY, eyeSize);
+            graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.2 + trailOffsetY + animOffsetY, eyeSize);
+          }
+        }
+      }
+      
+      // メインのファントム
+      graphics.fillStyle(color, features.transparency);
+      drawGhostBody(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, direction);
+      
+      // 顔の描画（上を向いている場合は顔は見えない）
+      if (direction !== 'up') {
+        drawGhostFace(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, features, details, direction);
+      }
+      
+      // 腕（あれば）
+      if (features.hasArms && direction !== 'up') {
+        drawGhostArms(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, color, features.transparency, direction);
+      }
+      
+      // グロー効果
+      graphics.fillStyle(features.glowColor, features.transparency * 0.2);
+      drawEllipse(
+        graphics,
+        centerX,
+        centerY + animOffsetY,
+        bodyWidth * 1.3,
+        bodyHeight * 1.3
+      );
+    }
+
+    /**
+     * シャドウタイプの幽霊を描画
+     */
+    drawShadowGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction) {
+      // シャドウは暗い色
+      const shadowColor = darkenColor(color, 50);
+      
+      // 底部の影
+      graphics.fillStyle(0x000000, 0.3);
+      drawEllipse(
+        graphics,
+        centerX,
+        centerY + bodyHeight * 0.8,
+        bodyWidth * 1.2,
+        bodyHeight * 0.2
+      );
+      
+      // 体（暗い色でより形がはっきりしない）
+      graphics.fillStyle(shadowColor, features.transparency * 0.8);
+      drawGhostBody(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, direction);
+      
+      // 腕（まるで霧のように伸びる）
+      if (features.hasArms && direction !== 'up') {
+        graphics.fillStyle(shadowColor, features.transparency * 0.6);
+        const armLength = bodyHeight * 0.6;
+        const armWidth = bodyWidth * 0.15;
+        
+        if (direction === 'down') {
+          // 両腕が見える
+          // 左腕
+          graphics.fillTriangle(
+            centerX - bodyWidth * 0.3,
+            centerY - bodyHeight * 0.1 + animOffsetY,
+            centerX - bodyWidth * 0.3 - armLength,
+            centerY + animOffsetY,
+            centerX - bodyWidth * 0.3,
+            centerY + armWidth + animOffsetY
+          );
+          
+          // 右腕
+          graphics.fillTriangle(
+            centerX + bodyWidth * 0.3,
+            centerY - bodyHeight * 0.1 + animOffsetY,
+            centerX + bodyWidth * 0.3 + armLength,
+            centerY + animOffsetY,
+            centerX + bodyWidth * 0.3,
+            centerY + armWidth + animOffsetY
+          );
+        } else if (direction === 'left' || direction === 'right') {
+          // 片腕だけ見える
+          const dirMod = direction === 'left' ? -1 : 1;
+          
+          graphics.fillTriangle(
+            centerX,
+            centerY - bodyHeight * 0.1 + animOffsetY,
+            centerX + dirMod * armLength,
+            centerY + animOffsetY,
+            centerX,
+            centerY + armWidth + animOffsetY
+          );
+        }
+      }
+      
+      // 顔（恐ろしい表情）- 上を向いている場合は省略
+      if (direction !== 'up') {
+        // 目
+        graphics.fillStyle(0xFF0000, features.transparency);
+        const eyeSpacing = bodyWidth * 0.3;
+        const eyeSize = bodyWidth * 0.1;
+        
+        graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.2 + animOffsetY, eyeSize);
+        graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.2 + animOffsetY, eyeSize);
+        
+        // 口（鋭い歯を持つ）
+        if (details) {
+          graphics.fillStyle(0xFFFFFF, features.transparency * 0.8);
+          
+          // 口の輪郭
+          drawEllipse(
+            graphics,
+            centerX,
+            centerY + animOffsetY,
+            bodyWidth * 0.4,
+            bodyHeight * 0.1
+          );
+          
+          // 歯
+          for (let i = 0; i < 4; i++) {
+            const toothWidth = bodyWidth * 0.05;
+            const toothSpacing = bodyWidth * 0.09;
+            
+            graphics.fillTriangle(
+              centerX - bodyWidth * 0.18 + i * toothSpacing,
+              centerY - bodyHeight * 0.05 + animOffsetY,
+              centerX - bodyWidth * 0.18 + i * toothSpacing + toothWidth,
+              centerY - bodyHeight * 0.05 + animOffsetY,
+              centerX - bodyWidth * 0.18 + i * toothSpacing + toothWidth / 2,
+              centerY + bodyHeight * 0.05 + animOffsetY
+            );
+          }
+        }
+      }
+      
+      // ダークオーラ
+      graphics.fillStyle(0x000000, features.transparency * 0.2);
+      drawEllipse(
+        graphics,
+        centerX,
+        centerY + animOffsetY,
+        bodyWidth * 1.4,
+        bodyHeight * 1.4
+      );
+    }
+
+    /**
+     * 通常の幽霊を描画
+     */
+    drawNormalGhost(graphics, color, width, height, centerX, centerY, bodyWidth, bodyHeight, features, animOffsetY, details, direction) {
+      // 底部の影
+      graphics.fillStyle(0x000000, 0.2);
+      drawEllipse(
+        graphics,
+        centerX,
+        centerY + bodyHeight * 0.8,
+        bodyWidth,
+        bodyHeight * 0.1
+      );
+      
+      // 体
+      graphics.fillStyle(color, features.transparency);
+      drawGhostBody(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, direction);
+      
+      // 腕（あれば）
+      if (features.hasArms && direction !== 'up') {
+        drawGhostArms(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, color, features.transparency, direction);
+      }
+      
+      // 顔の描画（上を向いている場合は顔は見えない）
+      if (direction !== 'up') {
+        drawGhostFace(graphics, centerX, centerY + animOffsetY, bodyWidth, bodyHeight, features, details, direction);
+      }
+    }
+
+    /**
+     * 幽霊の体を描画
+     */
+    drawGhostBody(graphics, centerX, centerY, bodyWidth, bodyHeight, direction) {
+      // 上半身（丸い頭部）
+      graphics.fillCircle(centerX, centerY - bodyHeight * 0.3, bodyWidth * 0.6);
+      
+      // 下半身（波形の裾）
+      graphics.beginPath();
+      
+      // 体の左端
+      graphics.moveTo(centerX - bodyWidth * 0.6, centerY - bodyHeight * 0.3);
+      
+      // 左側面
+      graphics.lineTo(centerX - bodyWidth * 0.6, centerY + bodyHeight * 0.3);
+      
+      // 波形の裾を描く
+      const waveCount = 5;
+      const waveWidth = bodyWidth * 1.2 / waveCount;
+      const waveHeight = bodyHeight * 0.2;
+      
+      for (let i = 0; i < waveCount; i++) {
+        const waveX = centerX - bodyWidth * 0.6 + waveWidth * i;
+        const waveY = centerY + bodyHeight * 0.3;
+        
+        if (i === 0) {
+          graphics.lineTo(waveX + waveWidth / 2, waveY + waveHeight);
+        } else {
+          graphics.lineTo(waveX, waveY);
+          graphics.lineTo(waveX + waveWidth / 2, waveY + waveHeight);
+        }
+      }
+      
+      // 体の右側面
+      graphics.lineTo(centerX + bodyWidth * 0.6, centerY - bodyHeight * 0.3);
+      
+      // 頭部の上部で閉じる
+      graphics.arc(centerX, centerY - bodyHeight * 0.3, bodyWidth * 0.6, 0, Math.PI, true);
+      
+      graphics.closePath();
+      graphics.fill();
+    }
+
+    /**
+     * 幽霊の顔を描画
+     */
+    drawGhostFace(graphics, centerX, centerY, bodyWidth, bodyHeight, features, details, direction) {
+      const faceType = features.faceType;
+      
+      if (faceType === 'scary') {
+        // 恐ろしい顔
+        // 目
+        graphics.fillStyle(0xFF0000, 0.8);
+        const eyeSpacing = bodyWidth * 0.3;
+        const eyeSize = bodyWidth * 0.1;
+        
+        graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.2, eyeSize);
+        graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.2, eyeSize);
+        
+        // 口
+        if (details) {
+          graphics.fillStyle(0x000000, 0.8);
+          drawEllipse(
+            graphics,
+            centerX,
+            centerY,
+            bodyWidth * 0.3,
+            bodyHeight * 0.1
+          );
+        }
+      } else if (faceType === 'cute') {
+        // かわいい顔
+        // 目
+        graphics.fillStyle(0x000000, 1);
+        const eyeSpacing = bodyWidth * 0.25;
+        const eyeSize = bodyWidth * 0.08;
+        
+        graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+        graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+        
+        // 白目のハイライト
+        graphics.fillStyle(0xFFFFFF, 0.8);
+        graphics.fillCircle(centerX - eyeSpacing / 2 + eyeSize * 0.3, centerY - bodyHeight * 0.3 - eyeSize * 0.3, eyeSize * 0.3);
+        graphics.fillCircle(centerX + eyeSpacing / 2 + eyeSize * 0.3, centerY - bodyHeight * 0.3 - eyeSize * 0.3, eyeSize * 0.3);
+        
+        // 口（笑顔）
+        if (details) {
+          graphics.lineStyle(2, 0x000000, 0.8);
+          graphics.beginPath();
+          graphics.arc(centerX, centerY - bodyHeight * 0.15, bodyWidth * 0.2, 0.1 * Math.PI, 0.9 * Math.PI, false);
+          graphics.strokePath();
+        }
+      } else {
+        // 通常の顔
+        // 目
+        graphics.fillStyle(0x000000, 0.8);
+        const eyeSpacing = bodyWidth * 0.3;
+        const eyeSize = bodyWidth * 0.1;
+        
+        if (direction === 'left') {
+          // 左向きは目が一つだけ見える
+          graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+        } else if (direction === 'right') {
+          // 右向きは目が一つだけ見える
+          graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+        } else {
+          // 正面向きは両目見える
+          graphics.fillCircle(centerX - eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+          graphics.fillCircle(centerX + eyeSpacing / 2, centerY - bodyHeight * 0.3, eyeSize);
+        }
+        
+        // 口
+        if (details) {
+          graphics.fillStyle(0x000000, 0.8);
+          drawEllipse(
+            graphics,
+            centerX,
+            centerY - bodyHeight * 0.1,
+            bodyWidth * 0.2,
+            bodyHeight * 0.05
+          );
+        }
+      }
+    }
+
+    /**
+     * 幽霊の腕を描画
+     */
+    drawGhostArms(graphics, centerX, centerY, bodyWidth, bodyHeight, color, transparency, direction) {
+      graphics.fillStyle(color, transparency * 0.8);
+      
+      if (direction === 'down') {
+        // 両腕が見える
+        // 左腕
+        graphics.fillCircle(centerX - bodyWidth * 0.7, centerY - bodyHeight * 0.1, bodyWidth * 0.15);
+        graphics.fillCircle(centerX - bodyWidth * 0.5, centerY - bodyHeight * 0.2, bodyWidth * 0.15);
+        
+        // 右腕
+        graphics.fillCircle(centerX + bodyWidth * 0.7, centerY - bodyHeight * 0.1, bodyWidth * 0.15);
+        graphics.fillCircle(centerX + bodyWidth * 0.5, centerY - bodyHeight * 0.2, bodyWidth * 0.15);
+      } else if (direction === 'left') {
+        // 左向きは右腕だけ見える
+        graphics.fillCircle(centerX + bodyWidth * 0.5, centerY - bodyHeight * 0.2, bodyWidth * 0.15);
+        graphics.fillCircle(centerX + bodyWidth * 0.7, centerY - bodyHeight * 0.1, bodyWidth * 0.15);
+      } else if (direction === 'right') {
+        // 右向きは左腕だけ見える
+        graphics.fillCircle(centerX - bodyWidth * 0.5, centerY - bodyHeight * 0.2, bodyWidth * 0.15);
+        graphics.fillCircle(centerX - bodyWidth * 0.7, centerY - bodyHeight * 0.1, bodyWidth * 0.15);
+      }
+    }
+
+    /**
+     * スライムキャラクターを描画
+     * @param {Phaser.GameObjects.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - キャラクターの色
+     * @param {number} width - 幅
+     * @param {number} height - 高さ
+     * @param {string} variant - バリアント ('normal', 'king', 'elemental', 'metal')
+     * @param {boolean} details - 詳細な描画を有効にするか
+     * @param {string} direction - 向き ('down', 'up', 'left', 'right')
+     * @param {boolean} animation - アニメーション風にするか
+     * @param {Object} customFeatures - カスタマイズオプション
+     */
+    drawSlimeCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures = {}) {
+      // デフォルトのカスタマイズオプション
+      const defaults = {
+        transparency: variant === 'normal' ? 0.8 : 0.9,
+        eyeColor: 0x000000,
+        innerColor: brightenColor(color, 20),
+        bubbleCount: variant === 'elemental' ? 8 : 4,
+        hasCrown: variant === 'king',
+        metallic: variant === 'metal',
+        facialExpression: 'happy' // 'happy', 'angry', 'neutral'
+      };
+      
+      const features = { ...defaults, ...customFeatures };
+      
+      // 基本的なサイズ計算
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      // スライムのサイズ調整
+      let sizeModifier = 1.0;
+      if (variant === 'king') {
+        sizeModifier = 1.2;
+      } else if (variant === 'metal') {
+        sizeModifier = 0.9;
+      }
+      
+      // スライムの体のサイズ
+      const bodyWidth = width * 0.5 * sizeModifier;
+      const bodyHeight = height * 0.4 * sizeModifier;
+      
+      // アニメーション効果（静止画でもわずかな動きを表現）
+      let squishY = 0;
+      let squishX = 0;
+      
+      if (animation) {
+        squishY = Math.sin(Date.now() * 0.005) * bodyHeight * 0.1;
+        squishX = -squishY * 0.5; // 体積保存の法則で横に広がる
+      }
+      
+      // 底部の影
+      graphics.fillStyle(0x000000, 0.2);
+      drawEllipse(
+        graphics,
+        centerX,
+        centerY + bodyHeight * 0.6,
+        bodyWidth,
+        bodyHeight * 0.1
+      );
+      
+      // スライムの体を描画（バリアントによって異なる）
+      if (variant === 'metal') {
+        // 金属スライムは反射光沢と硬い表面
+        drawMetalSlime(graphics, color, centerX, centerY, bodyWidth, bodyHeight, squishX, squishY, features, details, direction);
+      } else if (variant === 'elemental') {
+        // 属性スライムは内部にエネルギーの渦や粒子がある
+        drawElementalSlime(graphics, color, centerX, centerY, bodyWidth, bodyHeight, squishX, squishY, features, details, direction);
+      } else if (variant === 'king') {
+        // 王様スライムは王冠と大きさがある
+        drawKingSlime(graphics, color, centerX, centerY, bodyWidth, bodyHeight, squishX, squishY, features, details, direction);
+      } else {
+        // 通常のスライム
+        drawNormalSlime(graphics, color, centerX, centerY, bodyWidth, bodyHeight, squishX, squishY, features, details, direction);
+      }
+    }
+
+    /**
+     * 方向付きキャラクターアニメーションフレームを描画
+     * @param {CanvasRenderingContext2D} ctx - キャンバスコンテキスト
+     * @param {number} color - キャラクターの色
+     * @param {string} action - 動作タイプ
+     * @param {string} direction - 方向
+     * @param {number} frameIndex - フレームインデックス
+     * @param {number} x - X座標
+     * @param {number} y - Y座標
+     * @param {number} width - 幅
+     * @param {number} height - 高さ
+     * @param {number} shadowColor - 影の色
+     */
+    drawCharacterFrame(ctx, color, action, direction, frameIndex, x, y, width, height, shadowColor) {
+      // キャンバスの座標系は左上が原点
+      
+      // このフレームの領域をクリア
+      ctx.clearRect(x, y, width, height);
+      
+      // キャラクター描画のベース設定
+      const centerX = x + width / 2;
+      const centerY = y + height / 2;
+      const bodyWidth = width * 0.4;
+      const bodyHeight = height * 0.5;
+      const headRadius = width * 0.15;
+      
+      // 足の設定
+      const legLength = height * 0.2;
+      const legWidth = width * 0.08;
+      
+      // 腕の設定
+      const armLength = height * 0.25;
+      const armWidth = width * 0.08;
+      
+      // アニメーションフレームインデックスに基づく動きのオフセット
+      const frameOffset = frameIndex / 10;  // フレーム間の変化を滑らかにする
+      const walkCycle = Math.sin(frameIndex * Math.PI / 2); // 歩行サイクル (-1 〜 1)
+      
+      // 方向による体の向きを調整
+      let flipX = 1;  // 左右反転フラグ（1:通常、-1:反転）
+      let bodyOffsetX = 0;
+      let bodyOffsetY = 0;
+      
+      if (direction === 'left') {
+        flipX = -1;  // 左向きなら反転
+      }
+      
+      // 動作による体の調整
+      let bodyModifier = 1.0;  // 体の形状修飾子
+      let headOffsetY = 0;  // 頭の位置オフセット
+      let limbsActionModifier = 0;  // 手足の動きの修飾子
+      
+      // 動作に応じた体の構成を設定
+      if (action === 'idle') {
+        // アイドル状態は小さな上下運動
+        bodyOffsetY = Math.sin(frameIndex * 0.7) * 1.5;
+        limbsActionModifier = 0.3;
+      } else if (action === 'walk') {
+        // 歩行時は足と腕を大きく動かす
+        bodyOffsetY = Math.abs(walkCycle) * 2;
+        limbsActionModifier = 1.0;
+      } else if (action === 'attack') {
+        // 攻撃時は体を前に傾ける
+        bodyOffsetX = flipX * (frameIndex % 3) * 2;
+        bodyModifier = 0.9 + (frameIndex % 3) * 0.1;
+        limbsActionModifier = 1.5;
+      } else if (action === 'hurt') {
+        // ダメージ時は体を後ろに傾ける
+        bodyOffsetX = -flipX * 3;
+        bodyOffsetY = 2;
+        bodyModifier = 0.8;
+        limbsActionModifier = 0.8;
+      } else if (action === 'death') {
+        // 死亡時は徐々に倒れる
+        const deathProgress = frameIndex / 4;  // 0〜1の進行度
+        bodyOffsetY = 8 * deathProgress;
+        bodyModifier = 1.0 - 0.3 * deathProgress;
+        headOffsetY = 2 * deathProgress;
+        limbsActionModifier = -0.5 * deathProgress;
+      } else if (action === 'cast') {
+        // 魔法詠唱時は腕を上げる
+        bodyOffsetY = -Math.sin(frameIndex * 0.5) * 2;
+        limbsActionModifier = 0.7 + Math.sin(frameIndex * Math.PI / 2) * 0.3;
+      }
+      
+      // 足を描画（左右の足）
+      ctx.fillStyle = shadowColor; // 足は少し暗く
+      
+      // 左足と右足のオフセットを計算（歩行サイクルに基づく）
+      let leftLegOffset = 0;
+      let rightLegOffset = 0;
+      
+      if (action === 'walk') {
+        leftLegOffset = walkCycle * 5 * limbsActionModifier;
+        rightLegOffset = -walkCycle * 5 * limbsActionModifier;
+      } else if (action === 'attack') {
+        // 攻撃時は足を踏ん張る
+        leftLegOffset = -2 * limbsActionModifier;
+        rightLegOffset = 2 * limbsActionModifier;
+      } else if (action === 'idle') {
+        // アイドル時はわずかに動かす
+        leftLegOffset = Math.sin(frameIndex * 0.5) * limbsActionModifier;
+        rightLegOffset = -Math.sin(frameIndex * 0.5) * limbsActionModifier;
+      }
+      
+      // 左足
+      ctx.fillRect(
+        centerX - (legWidth * 1.5) + bodyOffsetX,
+        centerY + bodyHeight / 2 + leftLegOffset,
+        legWidth,
+        legLength
+      );
+      
+      // 右足
+      ctx.fillRect(
+        centerX + (legWidth * 0.5) + bodyOffsetX,
+        centerY + bodyHeight / 2 + rightLegOffset,
+        legWidth,
+        legLength
+      );
+      
+      // 体を描画
+      ctx.fillStyle = color;
+      
+      if (direction === 'up' || direction === 'down') {
+        // 上向きか下向きなら楕円形の体
+        drawEllipse(
+          ctx,
+          centerX + bodyOffsetX,
+          centerY + bodyOffsetY,
+          bodyWidth * bodyModifier,
+          bodyHeight
+        );
+      } else {
+        // 左右向きなら少し細長い楕円
+        drawEllipse(
+          ctx,
+          centerX + bodyOffsetX,
+          centerY + bodyOffsetY,
+          bodyWidth * bodyModifier * 0.9,
+          bodyHeight
+        );
+      }
+      
+      // 腕を描画（左右の腕）
+      ctx.fillStyle = color;
+      
+      // 腕の角度と長さを設定
+      let leftArmAngle = 0;
+      let rightArmAngle = 0;
+      let leftArmScale = 1;
+      let rightArmScale = 1;
+      
+      if (action === 'walk') {
+        // 歩行時は腕を振る
+        leftArmAngle = walkCycle * 0.5 * limbsActionModifier;
+        rightArmAngle = -walkCycle * 0.5 * limbsActionModifier;
+      } else if (action === 'attack') {
+        // 攻撃時は片腕を大きく振る
+        const attackProgress = (frameIndex % 3) / 2;  // 0〜1の攻撃進行度
+        
+        if (direction === 'left' || direction === 'right') {
+          // 左右方向の攻撃
+          leftArmAngle = flipX * (1 - attackProgress) * Math.PI * 0.3;
+          rightArmAngle = flipX * attackProgress * Math.PI * 0.5;
+          leftArmScale = 1 + attackProgress * 0.3;
+        } else {
+          // 上下方向の攻撃
+          leftArmAngle = (1 - attackProgress) * Math.PI * 0.3;
+          rightArmAngle = -attackProgress * Math.PI * 0.5;
+          rightArmScale = 1 + attackProgress * 0.3;
+        }
+      } else if (action === 'cast') {
+        // 魔法詠唱時は両腕を上げる
+        const castProgress = Math.sin(frameIndex * Math.PI / 2);  // 詠唱の進行
+        leftArmAngle = -0.3 - castProgress * 0.3;
+        rightArmAngle = 0.3 + castProgress * 0.3;
+      } else if (action === 'idle') {
+        // アイドル時はわずかに動かす
+        leftArmAngle = Math.sin(frameIndex * 0.5) * 0.1 * limbsActionModifier;
+        rightArmAngle = -Math.sin(frameIndex * 0.5) * 0.1 * limbsActionModifier;
+      } else if (action === 'hurt' || action === 'death') {
+        // ダメージや死亡時は腕を下げる
+        leftArmAngle = 0.2;
+        rightArmAngle = -0.2;
+      }
+      
+      // 腕の描画（方向と動作に応じて調整）
+      if (direction === 'up') {
+        // 上向き - 腕は体の横から後ろ向きに
+        drawArm(ctx, centerX - bodyWidth * 0.4 + bodyOffsetX, centerY - bodyHeight * 0.2 + bodyOffsetY, 
+              leftArmAngle - Math.PI * 0.3, armLength * leftArmScale, armWidth);
+        drawArm(ctx, centerX + bodyWidth * 0.4 + bodyOffsetX, centerY - bodyHeight * 0.2 + bodyOffsetY, 
+              rightArmAngle + Math.PI * 0.3, armLength * rightArmScale, armWidth);
+      } else if (direction === 'down') {
+        // 下向き - 腕は体の横から前向きに
+        drawArm(ctx, centerX - bodyWidth * 0.4 + bodyOffsetX, centerY - bodyHeight * 0.2 + bodyOffsetY, 
+              leftArmAngle + Math.PI * 0.3, armLength * leftArmScale, armWidth);
+        drawArm(ctx, centerX + bodyWidth * 0.4 + bodyOffsetX, centerY - bodyHeight * 0.2 + bodyOffsetY, 
+              rightArmAngle - Math.PI * 0.3, armLength * rightArmScale, armWidth);
+      } else {
+        // 左右向き - 片側の腕のみ見える
+        const armBaseX = centerX + bodyOffsetX;
+        const armBaseY = centerY - bodyHeight * 0.2 + bodyOffsetY;
+        
+        if (direction === 'left') {
+          // 左向き - 右腕が見える
+          drawArm(ctx, armBaseX, armBaseY, rightArmAngle + Math.PI * 0.2, armLength * rightArmScale, armWidth);
+        } else {
+          // 右向き - 左腕が見える
+          drawArm(ctx, armBaseX, armBaseY, leftArmAngle - Math.PI * 0.2, armLength * leftArmScale, armWidth);
+        }
+      }
+      
+      // 頭を描画
+      ctx.fillStyle = color;
+      let headX = centerX + bodyOffsetX;
+      let headY = centerY - bodyHeight * 0.5 + headOffsetY + bodyOffsetY;
+      
+      // 方向に応じた頭の形状
+      if (direction === 'up') {
+        // 上向きの頭（頭の上部が小さい）
+        drawEllipse(ctx, headX, headY, headRadius * 1.8, headRadius * 1.5);
+        
+        // 髪の毛のような装飾
+        ctx.fillStyle = darkenColor(color, 20);
+        drawEllipse(ctx, headX, headY - headRadius * 0.5, headRadius * 1.5, headRadius * 0.7);
+      } else if (direction === 'down') {
+        // 下向きの頭（普通の丸）
+        drawEllipse(ctx, headX, headY, headRadius * 1.8, headRadius * 1.7);
+        
+        // 顔のディテール
+        ctx.fillStyle = shadowColor;
+        
+        // 目
+        const eyeSize = headRadius * 0.2;
+        ctx.fillRect(headX - headRadius * 0.6, headY - headRadius * 0.2, eyeSize, eyeSize);
+        ctx.fillRect(headX + headRadius * 0.4, headY - headRadius * 0.2, eyeSize, eyeSize);
+        
+        // 口
+        ctx.fillRect(headX - headRadius * 0.3, headY + headRadius * 0.4, headRadius * 0.6, headRadius * 0.1);
+      } else {
+        // 左右向きの頭（横向きのシルエット）
+        drawEllipse(ctx, headX, headY, headRadius * 1.5, headRadius * 1.7);
+        
+        // 顔のディテール（方向に応じて左右反転）
+        ctx.fillStyle = shadowColor;
+        
+        // 目と口（方向に応じて位置調整）
+        if (direction === 'left') {
+          // 左向き
+          ctx.fillRect(headX - headRadius * 0.7, headY - headRadius * 0.2, headRadius * 0.3, headRadius * 0.3);
+          ctx.fillRect(headX - headRadius * 0.4, headY + headRadius * 0.4, headRadius * 0.3, headRadius * 0.1);
+        } else {
+          // 右向き
+          ctx.fillRect(headX + headRadius * 0.4, headY - headRadius * 0.2, headRadius * 0.3, headRadius * 0.3);
+          ctx.fillRect(headX + headRadius * 0.1, headY + headRadius * 0.4, headRadius * 0.3, headRadius * 0.1);
+        }
+      }
+      
+      // アクション固有のエフェクト
+      if (action === 'attack') {
+        // 攻撃エフェクト
+        const attackProgress = frameIndex / 2;
+        
+        if (attackProgress > 0.5) {
+          // 攻撃の軌跡
+          ctx.strokeStyle = brightenColor(color, 70);
+          ctx.lineWidth = 2;
+          
+          // 攻撃方向に応じた軌跡
+          ctx.beginPath();
+          if (direction === 'left') {
+            ctx.arc(centerX - width * 0.3, centerY, width * 0.3, -Math.PI * 0.8, -Math.PI * 0.2);
+          } else if (direction === 'right') {
+            ctx.arc(centerX + width * 0.3, centerY, width * 0.3, -Math.PI * 0.8, -Math.PI * 0.2);
+          } else if (direction === 'up') {
+            ctx.arc(centerX, centerY - height * 0.3, width * 0.3, Math.PI * 0.8, Math.PI * 0.2, true);
+          } else {
+            ctx.arc(centerX, centerY + height * 0.3, width * 0.3, -Math.PI * 0.2, -Math.PI * 0.8, true);
+          }
+          ctx.stroke();
+        }
+      } else if (action === 'cast') {
+        // 魔法詠唱エフェクト
+        const castProgress = frameIndex / 3;
+        
+        if (castProgress > 0.3) {
+          // 魔法のオーラ
+          const glowColor = brightenColor(color, 100);
+          ctx.fillStyle = `rgba(${(glowColor >> 16) & 0xFF}, ${(glowColor >> 8) & 0xFF}, ${glowColor & 0xFF}, 0.3)`;
+          
+          // 体の周りに魔法の円
+          const glowRadius = width * 0.4 * castProgress;
+          drawEllipse(ctx, centerX + bodyOffsetX, centerY + bodyOffsetY - height * 0.1, glowRadius, glowRadius * 0.8);
+          
+          // 魔法の粒子
+          ctx.fillStyle = brightenColor(color, 70);
+          for (let i = 0; i < 8; i++) {
+            const angle = Math.PI * 2 * i / 8 + frameIndex * 0.2;
+            const particleX = centerX + bodyOffsetX + Math.cos(angle) * glowRadius * 0.8;
+            const particleY = centerY + bodyOffsetY - height * 0.1 + Math.sin(angle) * glowRadius * 0.6;
+            const particleSize = width * 0.05 * (0.7 + Math.sin(frameIndex + i) * 0.3);
+            
+            drawEllipse(ctx, particleX, particleY, particleSize, particleSize);
+          }
+        }
+      } else if (action === 'hurt') {
+        // ダメージエフェクト
+        const hurtIntensity = 0.7 - frameIndex * 0.3;  // フレームが進むにつれて弱まる
+        
+        if (hurtIntensity > 0) {
+          // ダメージ時の赤い点滅
+          ctx.fillStyle = `rgba(255, 0, 0, ${hurtIntensity * 0.3})`;
+          ctx.fillRect(x, y, width, height);
+          
+          // 小さなダメージ表現（！マークのような）
+          ctx.fillStyle = 'rgba(255, 50, 50, 0.8)';
+          ctx.fillRect(centerX - width * 0.03, centerY - height * 0.3, width * 0.06, height * 0.15);
+          ctx.fillRect(centerX - width * 0.03, centerY - height * 0.1, width * 0.06, height * 0.05);
+        }
+      } else if (action === 'death') {
+        // 死亡エフェクト
+        const deathProgress = frameIndex / 4;  // 0〜1の進行度
+        
+        // 透明度を徐々に下げる
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.3 * deathProgress})`;
+        ctx.fillRect(x, y, width, height);
+        
+        // 魂が抜けるような表現
+        if (deathProgress > 0.5) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${(deathProgress - 0.5) * 0.8})`;
+          
+          for (let i = 0; i < 3; i++) {
+            const soulX = centerX + (Math.random() * 2 - 1) * width * 0.1;
+            const soulY = centerY - height * 0.3 * deathProgress - i * height * 0.15;
+            const soulSize = width * 0.1 * (1 - deathProgress * 0.5);
+            
+            drawEllipse(ctx, soulX, soulY, soulSize, soulSize * 1.5);
+          }
+        }
+      }
+    }
+
+    /**
+     * 楕円を描画するヘルパー関数
+     * @param {CanvasRenderingContext2D} ctx - キャンバスコンテキスト
+     * @param {number} x - 中心X座標
+     * @param {number} y - 中心Y座標
+     * @param {number} radiusX - X軸半径
+     * @param {number} radiusY - Y軸半径
+     */
+    drawEllipse(ctx, x, y, radiusX, radiusY) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    /**
+     * 腕を描画するヘルパー関数
+     * @param {CanvasRenderingContext2D} ctx - キャンバスコンテキスト
+     * @param {number} x - 接続点X座標
+     * @param {number} y - 接続点Y座標
+     * @param {number} angle - 角度（ラジアン）
+     * @param {number} length - 腕の長さ
+     * @param {number} width - 腕の幅
+     */
+    drawArm(ctx, x, y, angle, length, width) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      
+      // 腕の描画（少し湾曲した形）
+      ctx.beginPath();
+      ctx.moveTo(-width / 2, 0);
+      ctx.lineTo(-width / 2, length);
+      ctx.quadraticCurveTo(-width / 2 + width / 4, length + width / 2, width / 2, length);
+      ctx.lineTo(width / 2, 0);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.restore();
+    }
+
+    /**
+     * 複数方向のキャラクターアニメーションを生成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} baseKey - ベースとなるテクスチャーキー
+     * @param {number} color - キャラクターの色
+     * @param {string[]} actions - 生成する動作の配列
+     * @param {string[]} directions - 生成する方向の配列
+     * @param {Object} options - その他のオプション
+     * @returns {Object} 生成されたテクスチャのマップ
+     */
+    createCharacterAnimationSet(scene, baseKey, color, actions = ['idle', 'walk'], directions = ['down', 'left', 'right', 'up'], options = {}) {
+      if (!scene || !scene.textures) {
+        console.warn(`シーンが無効なため ${baseKey} アニメーションセットを作成できません`);
+        return {};
+      }
+      
+      const defaultOptions = {
+        frameWidth: 32,
+        frameHeight: 32,
+        frameRate: 8
+      };
+      
+      const settings = { ...defaultOptions, ...options };
+      const { frameWidth, frameHeight } = settings;
+      
+      // アクションフレーム数のマッピング
+      const actionFrames = {
+        idle: 4,
+        walk: 4,
+        attack: 3,
+        hurt: 2,
+        death: 5,
+        cast: 4
+      };
+      
+      console.log(`キャラクターアニメーションセット生成開始: ${baseKey}`);
+      
+      const generatedTextures = {};
+      
+      // 各動作と方向の組み合わせでスプライトシートを生成
+      for (const action of actions) {
+        generatedTextures[action] = {};
+        
+        for (const direction of directions) {
+          // 各アクションのフレーム数を取得
+          const frameCount = actionFrames[action] || 4;
+          
+          // テクスチャキーを生成
+          const textureKey = `${baseKey}_${action}_${direction}_sheet`;
+          
+          // スプライトシートを生成
+          this.createCharacterSpritesheet(
+            scene,
+            textureKey,
+            color,
+            action,
+            direction,
+            frameCount,
+            frameWidth,
+            frameHeight
+          );
+          
+          generatedTextures[action][direction] = textureKey;
+        }
+      }
+      
+      console.log(`✅ キャラクターアニメーションセット生成完了: ${baseKey}`);
+      return generatedTextures;
+    }
+
+    /**
+     * キャラクター向けの改良されたプレースホルダー生成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} key - テクスチャーキー
+     * @param {number} color - キャラクターの色
+     * @param {string} characterType - キャラクタータイプ ('humanoid', 'monster', 'ghost', 'slime', 'beast', 'mech')
+     * @param {Object} options - 追加オプション
+     * @returns {string} 生成されたテクスチャのキー
+     */
+    createEnhancedCharacter(scene, key, color, characterType = 'humanoid', options = {}) {
+      if (!scene || !scene.add) {
+        console.warn(`シーンが無効なため ${key} を作成できません`);
+        return null;
+      }
+      
+      const defaultOptions = {
+        width: 32,
+        height: 32,
+        variant: 'normal', // 'normal', 'armored', 'robed', 'hooded'
+        details: true,     // 詳細な描画を有効にするか
+        quality: 'high',   // 'low', 'medium', 'high'
+        alpha: 1.0,        // 透明度
+        direction: 'down', // 'down', 'up', 'left', 'right'
+        animation: false,  // アニメーション風にするか（静止画像の場合）
+        customFeatures: {} // キャラクタータイプ固有のカスタマイズ
+      };
+      
+      const settings = { ...defaultOptions, ...options };
+      const { width, height, variant, details, quality, alpha, direction, animation, customFeatures } = settings;
+      
+      try {
+        const graphics = scene.add.graphics();
+        
+        // キャラクタータイプごとに別々の描画関数を呼び出す
+        switch(characterType.toLowerCase()) {
+          case 'humanoid':
+            drawHumanoidCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          case 'monster':
+            drawMonsterCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          case 'ghost':
+            drawGhostCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          case 'slime':
+            drawSlimeCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          case 'beast':
+            drawBeastCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          case 'mech':
+            drawMechCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+            break;
+          default:
+            // デフォルトはhumanoid
+            drawHumanoidCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures);
+        }
+        
+        // テクスチャとして生成して登録
+        graphics.generateTexture(key, width, height);
+        graphics.destroy();
+        
+        // プレースホルダー一覧に追加
+        this.placeholders[key] = { 
+          type: 'character', 
+          characterType, 
+          variant,
+          color, 
+          width, 
+          height, 
+          direction
+        };
+        
+        console.log(`✅ 強化キャラクター生成完了: ${key} (${characterType}, ${variant})`);
+        return key;
+      } catch (e) {
+        console.error(`強化キャラクター ${key} の生成中にエラーが発生しました:`, e);
+        
+        // エラーが発生した場合、単純な色付き矩形で代用
+        this.createColorRect(scene, key, width, height, color, alpha);
+        return key;
+      }
+    }
+
+    /**
+     * 人型キャラクターを描画（続き）
+     * @param {Phaser.GameObjects.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} color - キャラクターの色
+     * @param {number} width - 幅
+     * @param {number} height - 高さ
+     * @param {string} variant - バリアント ('normal', 'armored', 'robed', 'hooded')
+     * @param {boolean} details - 詳細な描画を有効にするか
+     * @param {string} direction - 向き ('down', 'up', 'left', 'right')
+     * @param {boolean} animation - アニメーション風にするか
+     * @param {Object} customFeatures - カスタマイズオプション
+     */
+    drawHumanoidCharacter(graphics, color, width, height, variant, details, direction, animation, customFeatures = {}) {
+      // 前のコードの続き...
+      
+      // デフォルトのカスタマイズオプション
+      const defaults = {
+        hairColor: darkenColor(color, 20),
+        skinColor: brightenColor(color, 30),
+        clothColor: color,
+        armorColor: darkenColor(color, 10),
+        eyeColor: 0x000000,
+        accessoryColor: 0xFFD700,
+        hasWeapon: false,
+        weaponType: 'sword', // 'sword', 'axe', 'staff', 'bow'
+        hasShield: false,
+        hairStyle: 'short', // 'short', 'long', 'ponytail', 'bald'
+        hasBeard: false,
+        hasHelmet: false,
+        hasHat: false
+      };
+      
+      const features = { ...defaults, ...customFeatures };
+      
+      // 基本的なサイズ計算
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const headRadius = width * 0.15;
+      const bodyWidth = width * 0.4;
+      const bodyHeight = height * 0.3;
+      
+      // 腕と足のサイズ
+      const limbWidth = width * 0.08;
+      const armLength = height * 0.25;
+      const legLength = height * 0.2;
+      
+      // アニメーション効果（静止画でもわずかな動きを表現）
+      let animOffsetY = 0;
+      let leftLegOffset = 0;
+      let rightLegOffset = 0;
+      let leftArmAngle = 0;
+      let rightArmAngle = 0;
+      
+      if (animation) {
+        animOffsetY = 1;
+        leftLegOffset = 2;
+        rightLegOffset = -1;
+        leftArmAngle = 0.1;
+        rightArmAngle = -0.05;
+      }
+      
+      // 頭と体の位置計算
+      const headY = centerY - bodyHeight * 0.5 - headRadius;
+      let bodyY = centerY;
+      
+      if (variant === 'normal' || variant === 'hooded') {
+        bodyY = centerY;
+      } else if (variant === 'armored') {
+        bodyY = centerY + 1; // 重い鎧で少し下がる
+      } else if (variant === 'robed') {
+        bodyY = centerY - 2; // ローブで少し上がる
+      }
+      
+      // 方向による描画順序とサイズの調整
+      let drawOrder;
+      let headScaleX = 1;
+      let bodyScaleX = 1;
+      
+      if (direction === 'down') {
+        drawOrder = ['legs', 'body', 'arms', 'head', 'face', 'hair', 'accessories'];
+      } else if (direction === 'up') {
+        drawOrder = ['legs', 'arms', 'body', 'head', 'hair', 'accessories', 'face'];
+      } else if (direction === 'left') {
+        drawOrder = ['legs', 'body', 'right_arm', 'head', 'face', 'hair', 'left_arm', 'accessories'];
+        headScaleX = 0.8;
+        bodyScaleX = 0.9;
+      } else { // right
+        drawOrder = ['legs', 'body', 'left_arm', 'head', 'face', 'hair', 'right_arm', 'accessories'];
+        headScaleX = 0.8;
+        bodyScaleX = 0.9;
+      }
+      
+      // 各パーツを描画順序に従って描画
+      for (const part of drawOrder) {
+        switch (part) {
+          case 'legs':
+            // 足を描画
+            graphics.fillStyle(features.clothColor, 1);
+            
+            // 左足
+            graphics.fillRect(
+              centerX - limbWidth * 1.5,
+              bodyY + bodyHeight / 2 + leftLegOffset,
+              limbWidth,
+              legLength
+            );
+            
+            // 右足
+            graphics.fillRect(
+              centerX + limbWidth * 0.5,
+              bodyY + bodyHeight / 2 + rightLegOffset,
+              limbWidth,
+              legLength
+            );
+            
+            // バリアントによる調整
+            if (variant === 'armored') {
+              // 鎧の足
+              graphics.fillStyle(features.armorColor, 1);
+              graphics.fillRect(
+                centerX - limbWidth * 1.5 - 1,
+                bodyY + bodyHeight / 2 + leftLegOffset + legLength * 0.6,
+                limbWidth + 2,
+                legLength * 0.4
+              );
+              graphics.fillRect(
+                centerX + limbWidth * 0.5 - 1,
+                bodyY + bodyHeight / 2 + rightLegOffset + legLength * 0.6,
+                limbWidth + 2,
+                legLength * 0.4
+              );
+            } else if (variant === 'robed') {
+              // ローブの下部
+              graphics.fillStyle(features.clothColor, 1);
+              graphics.fillTriangle(
+                centerX - limbWidth * 2,
+                bodyY + bodyHeight / 2,
+                centerX + limbWidth * 2,
+                bodyY + bodyHeight / 2,
+                centerX,
+                bodyY + bodyHeight / 2 + legLength * 1.2
+              );
+            }
+            break;
+            
+          case 'body':
+            // 体を描画
+            let bodyFillColor = features.clothColor;
+            
+            if (variant === 'armored') {
+              bodyFillColor = features.armorColor;
+            }
+            
+            // 体の本体
+            graphics.fillStyle(bodyFillColor, 1);
+            
+            if (direction === 'left' || direction === 'right') {
+              // 横向きの体（少し薄く）
+              drawEllipse(
+                graphics,
+                centerX,
+                bodyY,
+                bodyWidth * bodyScaleX,
+                bodyHeight
+              );
+            } else {
+              // 前後向きの体
+              drawEllipse(
+                graphics,
+                centerX,
+                bodyY,
+                bodyWidth,
+                bodyHeight
+              );
+            }
+            
+            // バリアントごとの詳細
+            if (details) {
+              if (variant === 'armored') {
+                // 鎧のデザイン
+                graphics.fillStyle(darkenColor(features.armorColor, 20), 1);
+                
+                // 胸部プレート
+                if (direction === 'down' || direction === 'up') {
+                  graphics.fillRect(
+                    centerX - bodyWidth * 0.3,
+                    bodyY - bodyHeight * 0.2,
+                    bodyWidth * 0.6,
+                    bodyHeight * 0.4
+                  );
+                }
+                
+                // 肩部プレート
+                graphics.fillStyle(brightenColor(features.armorColor, 10), 1);
+                if (direction !== 'left') {
+                  drawEllipse(
+                    graphics,
+                    centerX - bodyWidth * 0.4,
+                    bodyY - bodyHeight * 0.3,
+                    bodyWidth * 0.2,
+                    bodyHeight * 0.2
+                  );
+                }
+                
+                if (direction !== 'right') {
+                  drawEllipse(
+                    graphics,
+                    centerX + bodyWidth * 0.4,
+                    bodyY - bodyHeight * 0.3,
+                    bodyWidth * 0.2,
+                    bodyHeight * 0.2
+                  );
+                }
+              } else if (variant === 'robed') {
+                // ローブのデザイン
+                graphics.fillStyle(darkenColor(features.clothColor, 15), 1);
+                
+                // ローブの襟
+                drawEllipse(
+                  graphics,
+                  centerX,
+                  bodyY - bodyHeight * 0.3,
+                  bodyWidth * 0.8,
+                  bodyHeight * 0.2
+                );
+                
+                // ローブのベルト
+                graphics.fillStyle(darkenColor(features.clothColor, 30), 1);
+                graphics.fillRect(
+                  centerX - bodyWidth * 0.5,
+                  bodyY,
+                  bodyWidth,
+                  bodyHeight * 0.1
+                );
+              } else {
+                // 通常の服のデザイン
+                graphics.fillStyle(darkenColor(features.clothColor, 20), 1);
+                
+                if (direction === 'down') {
+                  // 前面のボタンやデザイン
+                  graphics.fillRect(
+                    centerX - bodyWidth * 0.1,
+                    bodyY - bodyHeight * 0.3,
+                    bodyWidth * 0.2,
+                    bodyHeight * 0.6
+                  );
+                }
+              }
+            }
+            break;
+            
+          case 'arms':
+          case 'left_arm':
+          case 'right_arm':
+            // 腕を描画
+            graphics.fillStyle(variant === 'armored' ? features.armorColor : features.skinColor, 1);
+            
+            // 左右の腕のオフセットとサイズ
+            const armOffsetX = bodyWidth * 0.5;
+            const armOffsetY = bodyHeight * 0.1;
+            
+            // 特定方向の場合のみ特定の腕を描画
+            if (part === 'arms' || 
+                (part === 'left_arm' && (direction === 'right' || direction === 'down' || direction === 'up')) ||
+                (part === 'right_arm' && (direction === 'left' || direction === 'down' || direction === 'up'))) {
+              
+              if (part !== 'right_arm') {
+                // 左腕
+                if (features.hasShield && (direction === 'down' || direction === 'right')) {
+                  // 盾を持つ姿勢
+                  graphics.fillStyle(features.armorColor, 1);
+                  graphics.fillRect(
+                    centerX - armOffsetX - limbWidth,
+                    bodyY - armOffsetY,
+                    limbWidth,
+                    armLength * 0.7
+                  );
+                  
+                  // 盾
+                  graphics.fillStyle(brightenColor(features.armorColor, 20), 1);
+                  graphics.fillRect(
+                    centerX - armOffsetX - limbWidth * 3,
+                    bodyY - armOffsetY,
+                    limbWidth * 2,
+                    armLength * 0.8
+                  );
+                  
+                  // 盾のデザイン
+                  if (details) {
+                    graphics.fillStyle(features.accessoryColor, 1);
+                    graphics.fillCircle(
+                      centerX - armOffsetX - limbWidth * 2,
+                      bodyY - armOffsetY + armLength * 0.4,
+                      limbWidth * 0.5
+                    );
+                  }
+                } else {
+                  // 通常の左腕
+                  graphics.fillRect(
+                    centerX - armOffsetX - limbWidth,
+                    bodyY - armOffsetY,
+                    limbWidth,
+                    armLength
+                  );
+                  
+                  // 左手
+                  graphics.fillStyle(features.skinColor, 1);
+                  drawEllipse(
+                    graphics,
+                    centerX - armOffsetX - limbWidth * 0.5,
+                    bodyY - armOffsetY + armLength,
+                    limbWidth * 0.8,
+                    limbWidth * 0.8
+                  );
+                }
+              }
+              
+              if (part !== 'left_arm') {
+                // 右腕
+                if (features.hasWeapon && (direction === 'down' || direction === 'left')) {
+                  // 武器を持つ姿勢
+                  graphics.fillStyle(variant === 'armored' ? features.armorColor : features.skinColor, 1);
+                  graphics.fillRect(
+                    centerX + armOffsetX,
+                    bodyY - armOffsetY,
+                    limbWidth,
+                    armLength * 0.6
+                  );
+                  
+                  // 武器のタイプに応じた描画
+                  graphics.fillStyle(0x8B4513, 1); // 武器の柄（茶色）
+                  
+                  if (features.weaponType === 'sword') {
+                    // 剣
+                    graphics.fillRect(
+                      centerX + armOffsetX + limbWidth,
+                      bodyY - armOffsetY + armLength * 0.4,
+                      limbWidth * 0.5,
+                      armLength * 0.8
+                    );
+                    
+                    // 剣の刃
+                    graphics.fillStyle(0xC0C0C0, 1); // 銀色
+                    graphics.fillRect(
+                      centerX + armOffsetX + limbWidth * 0.75,
+                      bodyY - armOffsetY,
+                      limbWidth,
+                      armLength * 0.4
+                    );
+                  } else if (features.weaponType === 'axe') {
+                    // 斧
+                    graphics.fillRect(
+                      centerX + armOffsetX + limbWidth,
+                      bodyY - armOffsetY + armLength * 0.3,
+                      limbWidth * 0.5,
+                      armLength
+                    );
+                    
+                    // 斧の刃
+                    graphics.fillStyle(0xC0C0C0, 1); // 銀色
+                    graphics.fillTriangle(
+                      centerX + armOffsetX + limbWidth * 1.5,
+                      bodyY - armOffsetY + armLength * 0.3,
+                      centerX + armOffsetX + limbWidth * 3,
+                      bodyY - armOffsetY + armLength * 0.1,
+                      centerX + armOffsetX + limbWidth * 3,
+                      bodyY - armOffsetY + armLength * 0.5
+                    );
+                  } else if (features.weaponType === 'staff') {
+                    // 杖
+                    graphics.fillRect(
+                      centerX + armOffsetX + limbWidth,
+                      bodyY - armOffsetY - armLength * 0.3,
+                      limbWidth * 0.5,
+                      armLength * 1.5
+                    );
+                    
+                    // 杖の飾り
+                    graphics.fillStyle(features.accessoryColor, 1); // 金色
+                    graphics.fillCircle(
+                      centerX + armOffsetX + limbWidth * 1.25,
+                      bodyY - armOffsetY - armLength * 0.3,
+                      limbWidth
+                    );
+                  } else if (features.weaponType === 'bow') {
+                    // 弓
+                    graphics.lineStyle(limbWidth * 0.5, 0x8B4513, 1);
+                    graphics.beginPath();
+                    graphics.arc(
+                      centerX + armOffsetX + limbWidth * 2,
+                      bodyY - armOffsetY + armLength * 0.5,
+                      armLength * 0.8,
+                      -Math.PI * 0.6,
+                      Math.PI * 0.6
+                    );
+                    graphics.strokePath();
+                    
+                    // 弓の弦
+                    graphics.lineStyle(1, 0xFFFFFF, 1);
+                    graphics.lineBetween(
+                      centerX + armOffsetX + limbWidth * 2 + Math.cos(-Math.PI * 0.6) * armLength * 0.8,
+                      bodyY - armOffsetY + armLength * 0.5 + Math.sin(-Math.PI * 0.6) * armLength * 0.8,
+                      centerX + armOffsetX + limbWidth * 2 + Math.cos(Math.PI * 0.6) * armLength * 0.8,
+                      bodyY - armOffsetY + armLength * 0.5 + Math.sin(Math.PI * 0.6) * armLength * 0.8
+                    );
+                  }
+                } else {
+                  // 通常の右腕
+                  graphics.fillRect(
+                    centerX + armOffsetX,
+                    bodyY - armOffsetY,
+                    limbWidth,
+                    armLength
+                  );
+                  
+                  // 右手
+                  graphics.fillStyle(features.skinColor, 1);
+                  drawEllipse(
+                    graphics,
+                    centerX + armOffsetX + limbWidth * 0.5,
+                    bodyY - armOffsetY + armLength,
+                    limbWidth * 0.8,
+                    limbWidth * 0.8
+                  );
+                }
+              }
+            }
+            break;
+            
+          case 'head':
+            // 頭を描画
+            graphics.fillStyle(features.skinColor, 1);
+            
+            // 方向に応じた頭の形
+            if (direction === 'left' || direction === 'right') {
+              // 横向きの頭（楕円形）
+              drawEllipse(
+                graphics,
+                centerX,
+                headY,
+                headRadius * headScaleX * 1.2,
+                headRadius * 1.3
+              );
+            } else {
+              // 前後向きの頭（丸）
+              drawEllipse(
+                graphics,
+                centerX,
+                headY,
+                headRadius * 1.2,
+                headRadius * 1.3
+              );
+            }
+            break;
+            
+          case 'face':
+            // 顔の詳細を描画（目、口など）
+            if (details) {
+              if (direction === 'down') {
+                // 目
+                graphics.fillStyle(0xFFFFFF, 1);
+                graphics.fillCircle(
+                  centerX - headRadius * 0.4,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.25
+                );
+                graphics.fillCircle(
+                  centerX + headRadius * 0.4,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.25
+                );
+                
+                // 瞳
+                graphics.fillStyle(features.eyeColor, 1);
+                graphics.fillCircle(
+                  centerX - headRadius * 0.4,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.12
+                );
+                graphics.fillCircle(
+                  centerX + headRadius * 0.4,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.12
+                );
+                
+                // 口
+                graphics.fillStyle(0x000000, 1);
+                graphics.fillRect(
+                  centerX - headRadius * 0.3,
+                  headY + headRadius * 0.4,
+                  headRadius * 0.6,
+                  headRadius * 0.1
+                );
+              } else if (direction === 'left') {
+                // 左向きの目と口
+                graphics.fillStyle(0xFFFFFF, 1);
+                graphics.fillCircle(
+                  centerX - headRadius * 0.2,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.25
+                );
+                
+                graphics.fillStyle(features.eyeColor, 1);
+                graphics.fillCircle(
+                  centerX - headRadius * 0.2,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.12
+                );
+                
+                // 口
+                graphics.fillStyle(0x000000, 1);
+                graphics.fillRect(
+                  centerX - headRadius * 0.6,
+                  headY + headRadius * 0.3,
+                  headRadius * 0.3,
+                  headRadius * 0.1
+                );
+              } else if (direction === 'right') {
+                // 右向きの目と口
+                graphics.fillStyle(0xFFFFFF, 1);
+                graphics.fillCircle(
+                  centerX + headRadius * 0.2,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.25
+                );
+                
+                graphics.fillStyle(features.eyeColor, 1);
+                graphics.fillCircle(
+                  centerX + headRadius * 0.2,
+                  headY - headRadius * 0.1,
+                  headRadius * 0.12
+                );
+                
+                // 口
+                graphics.fillStyle(0x000000, 1);
+                graphics.fillRect(
+                  centerX + headRadius * 0.3,
+                  headY + headRadius * 0.3,
+                  headRadius * 0.3,
+                  headRadius * 0.1
+                );
+              } else if (direction === 'up') {
+                // 後ろ向きは顔の詳細なし
+              }
+              
+              // ひげがある場合
+              if (features.hasBeard && direction !== 'up') {
+                graphics.fillStyle(features.hairColor, 1);
+                
+                if (direction === 'down') {
+                  // 正面向きのひげ
+                  graphics.fillRect(
+                    centerX - headRadius * 0.4,
+                    headY + headRadius * 0.5,
+                    headRadius * 0.8,
+                    headRadius * 0.4
+                  );
+                } else if (direction === 'left') {
+                  // 左向きのひげ
+                  graphics.fillRect(
+                    centerX - headRadius * 0.8,
+                    headY + headRadius * 0.3,
+                    headRadius * 0.5,
+                    headRadius * 0.4
+                  );
+                } else if (direction === 'right') {
+                  // 右向きのひげ
+                  graphics.fillRect(
+                    centerX + headRadius * 0.3,
+                    headY + headRadius * 0.3,
+                    headRadius * 0.5,
+                    headRadius * 0.4
+                  );
+                }
+              }
+            }
+            break;
+            
+          case 'hair':
+            // 髪の毛を描画
+            if (!features.hasHelmet && features.hairStyle !== 'bald') {
+              graphics.fillStyle(features.hairColor, 1);
+              
+              if (features.hairStyle === 'short') {
+                // 短い髪
+                if (direction === 'down') {
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.4,
+                    headRadius * 1.3,
+                    headRadius * 0.7
+                  );
+                } else if (direction === 'up') {
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.4,
+                    headRadius * 1.3,
+                    headRadius * 0.7
+                  );
+                } else if (direction === 'left') {
+                  drawEllipse(
+                    graphics,
+                    centerX - headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                } else if (direction === 'right') {
+                  drawEllipse(
+                    graphics,
+                    centerX + headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                }
+              } else if (features.hairStyle === 'long') {
+                // 長い髪
+                if (direction === 'down') {
+                  // 頭頂部
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.4,
+                    headRadius * 1.3,
+                    headRadius * 0.7
+                  );
+                  
+                  // 両サイドの長い髪
+                  graphics.fillRect(
+                    centerX - headRadius * 1.3,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.5,
+                    bodyHeight
+                  );
+                  graphics.fillRect(
+                    centerX + headRadius * 0.8,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.5,
+                    bodyHeight
+                  );
+                } else if (direction === 'up') {
+                  // 後ろの長い髪
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.2,
+                    headRadius * 1.3,
+                    headRadius * 0.9
+                  );
+                  
+                  // 背中に垂れる髪
+                  graphics.fillRect(
+                    centerX - headRadius * 0.8,
+                    headY,
+                    headRadius * 1.6,
+                    bodyHeight * 0.8
+                  );
+                } else if (direction === 'left') {
+                  // 左向きの長い髪
+                  drawEllipse(
+                    graphics,
+                    centerX - headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                  
+                  // 後ろの長い髪
+                  graphics.fillRect(
+                    centerX + headRadius * 0.5,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.5,
+                    bodyHeight * 0.8
+                  );
+                } else if (direction === 'right') {
+                  // 右向きの長い髪
+                  drawEllipse(
+                    graphics,
+                    centerX + headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                  
+                  // 前の長い髪
+                  graphics.fillRect(
+                    centerX - headRadius * 1,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.5,
+                    bodyHeight * 0.8
+                  );
+                }
+              } else if (features.hairStyle === 'ponytail') {
+                // ポニーテール
+                if (direction === 'down') {
+                  // 頭頂部
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.4,
+                    headRadius * 1.3,
+                    headRadius * 0.7
+                  );
+                  
+                  // ポニーテール
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY + headRadius * 0.5,
+                    headRadius * 0.5,
+                    bodyHeight * 0.4
+                  );
+                } else if (direction === 'up') {
+                  // 頭頂部
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.4,
+                    headRadius * 1.3,
+                    headRadius * 0.7
+                  );
+                  
+                  // 見えないポニーテール
+                } else if (direction === 'left') {
+                  // 左向きの頭頂部
+                  drawEllipse(
+                    graphics,
+                    centerX - headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                  
+                  // 横から見えるポニーテール
+                  drawEllipse(
+                    graphics,
+                    centerX + headRadius * 0.8,
+                    headY,
+                    headRadius * 0.5,
+                    headRadius * 0.8
+                  );
+                } else if (direction === 'right') {
+                  // 右向きの頭頂部
+                  drawEllipse(
+                    graphics,
+                    centerX + headRadius * 0.2,
+                    headY - headRadius * 0.4,
+                    headRadius * 0.8,
+                    headRadius * 0.7
+                  );
+                  
+                  // 横から見えるポニーテール
+                  drawEllipse(
+                    graphics,
+                    centerX - headRadius * 0.8,
+                    headY,
+                    headRadius * 0.5,
+                    headRadius * 0.8
+                  );
+                }
+              }
+            }
+            
+            // フードがある場合（robed/hooded）
+            if (variant === 'hooded' || (variant === 'robed' && customFeatures.hasHood)) {
+              graphics.fillStyle(features.clothColor, 1);
+              
+              if (direction === 'down') {
+                // 前から見たフード
+                graphics.fillCircle(
+                  centerX,
+                  headY,
+                  headRadius * 1.5
+                );
+                
+                // フードの開口部
+                graphics.fillStyle(darkenColor(features.clothColor, 40), 1);
+                graphics.fillCircle(
+                  centerX,
+                  headY,
+                  headRadius * 1.1
+                );
+              } else if (direction === 'up') {
+                // 後ろから見たフード
+                graphics.fillCircle(
+                  centerX,
+                  headY,
+                  headRadius * 1.5
+                );
+              } else if (direction === 'left') {
+                // 左から見たフード
+                graphics.fillRect(
+                  centerX - headRadius * 1.5,
+                  headY - headRadius * 1.2,
+                  headRadius * 3,
+                  headRadius * 2.4
+                );
+                
+                // フードの開口部
+                graphics.fillStyle(darkenColor(features.clothColor, 40), 1);
+                graphics.fillCircle(
+                  centerX - headRadius * 0.2,
+                  headY,
+                  headRadius * 1.1
+                );
+              } else if (direction === 'right') {
+                // 右から見たフード
+                graphics.fillRect(
+                  centerX - headRadius * 1.5,
+                  headY - headRadius * 1.2,
+                  headRadius * 3,
+                  headRadius * 2.4
+                );
+                
+                // フードの開口部
+                graphics.fillStyle(darkenColor(features.clothColor, 40), 1);
+                graphics.fillCircle(
+                  centerX + headRadius * 0.2,
+                  headY,
+                  headRadius * 1.1
+                );
+              }
+            }
+            break;
+            
+          case 'accessories':
+            // アクセサリー（帽子、ヘルメット、その他装飾品）
+            if (features.hasHelmet) {
+              // ヘルメット
+              graphics.fillStyle(features.armorColor, 1);
+              
+              if (direction === 'down') {
+                // 前からのヘルメット
+                drawEllipse(
+                  graphics,
+                  centerX,
+                  headY,
+                  headRadius * 1.3,
+                  headRadius * 1.2
+                );
+                
+                // 詳細表現（ある場合）
+                if (details) {
+                  // ヘルメットの鼻パーツ
+                  graphics.fillStyle(darkenColor(features.armorColor, 20), 1);
+                  graphics.fillTriangle(
+                    centerX - headRadius * 0.3,
+                    headY,
+                    centerX + headRadius * 0.3,
+                    headY,
+                    centerX,
+                    headY + headRadius * 0.6
+                  );
+                  
+                  // ヘルメットの装飾
+                  graphics.fillStyle(features.accessoryColor, 1);
+                  graphics.fillRect(
+                    centerX - headRadius * 0.8,
+                    headY - headRadius * 0.8,
+                    headRadius * 1.6,
+                    headRadius * 0.3
+                  );
+                }
+              } else if (direction === 'up') {
+                // 後ろからのヘルメット
+                drawEllipse(
+                  graphics,
+                  centerX,
+                  headY,
+                  headRadius * 1.3,
+                  headRadius * 1.2
+                );
+                
+                // 詳細表現（ある場合）
+                if (details) {
+                  // ヘルメットの後ろの装飾
+                  graphics.fillStyle(darkenColor(features.armorColor, 10), 1);
+                  graphics.fillRect(
+                    centerX - headRadius * 0.8,
+                    headY - headRadius * 0.8,
+                    headRadius * 1.6,
+                    headRadius * 0.3
+                  );
+                }
+              } else if (direction === 'left') {
+                // 左からのヘルメット
+                drawEllipse(
+                  graphics,
+                  centerX,
+                  headY,
+                  headRadius * 1.2,
+                  headRadius * 1.2
+                );
+                
+                // 詳細表現（ある場合）
+                if (details) {
+                  // ヘルメットの横の装飾
+                  graphics.fillStyle(features.accessoryColor, 1);
+                  graphics.fillCircle(
+                    centerX + headRadius * 0.3,
+                    headY - headRadius * 0.5,
+                    headRadius * 0.3
+                  );
+                }
+              } else if (direction === 'right') {
+                // 右からのヘルメット
+                drawEllipse(
+                  graphics,
+                  centerX,
+                  headY,
+                  headRadius * 1.2,
+                  headRadius * 1.2
+                );
+                
+                // 詳細表現（ある場合）
+                if (details) {
+                  // ヘルメットの横の装飾
+                  graphics.fillStyle(features.accessoryColor, 1);
+                  graphics.fillCircle(
+                    centerX - headRadius * 0.3,
+                    headY - headRadius * 0.5,
+                    headRadius * 0.3
+                  );
+                }
+              }
+            } else if (features.hasHat) {
+              // 帽子（ローブのときは魔法使いの帽子）
+              const hatColor = variant === 'robed' ? features.clothColor : features.accessoryColor;
+              graphics.fillStyle(hatColor, 1);
+              
+              if (variant === 'robed') {
+                // 魔法使いの帽子
+                if (direction === 'down') {
+                  // 帽子の円錐部分
+                  graphics.fillTriangle(
+                    centerX - headRadius * 1.0,
+                    headY - headRadius * 0.5,
+                    centerX + headRadius * 1.0,
+                    headY - headRadius * 0.5,
+                    centerX,
+                    headY - headRadius * 2.5
+                  );
+                  
+                  // 帽子のつば
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.5,
+                    headRadius * 1.3,
+                    headRadius * 0.3
+                  );
+                  
+                  // 帽子の装飾
+                  if (details) {
+                    graphics.fillStyle(features.accessoryColor, 1);
+                    graphics.fillCircle(
+                      centerX,
+                      headY - headRadius * 1.5,
+                      headRadius * 0.3
+                    );
+                  }
+                } else if (direction === 'up') {
+                  // 背面からは帽子の後ろ部分
+                  graphics.fillTriangle(
+                    centerX - headRadius * 1.0,
+                    headY - headRadius * 0.5,
+                    centerX + headRadius * 1.0,
+                    headY - headRadius * 0.5,
+                    centerX,
+                    headY - headRadius * 2.5
+                  );
+                  
+                  // 帽子のつば
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.5,
+                    headRadius * 1.3,
+                    headRadius * 0.3
+                  );
+                } else if (direction === 'left' || direction === 'right') {
+                  // 横向きの魔法使いの帽子
+                  const dirMod = direction === 'left' ? -1 : 1;
+                  
+                  // 帽子の円錐部分（横から見ると曲がっている）
+                  graphics.beginPath();
+                  graphics.moveTo(centerX, headY - headRadius * 0.5);
+                  graphics.quadraticCurveTo(
+                    centerX + dirMod * headRadius * 1.0,
+                    headY - headRadius * 1.5,
+                    centerX + dirMod * headRadius * 0.5,
+                    headY - headRadius * 2.5
+                  );
+                  graphics.lineTo(centerX, headY - headRadius * 0.5);
+                  graphics.fillPath();
+                  
+                  // 帽子のつば（楕円形）
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.5,
+                    headRadius * 0.8,
+                    headRadius * 0.3
+                  );
+                }
+              } else {
+                // 一般的な帽子
+                if (direction === 'down') {
+                  // 帽子の上部
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.8,
+                    headRadius * 1.2,
+                    headRadius * 0.5
+                  );
+                  
+                  // 帽子のつば
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.5,
+                    headRadius * 1.5,
+                    headRadius * 0.2
+                  );
+                } else if (direction === 'up') {
+                  // 背面から見た帽子
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.8,
+                    headRadius * 1.2,
+                    headRadius * 0.5
+                  );
+                  
+                  // 帽子のつば
+                  drawEllipse(
+                    graphics,
+                    centerX,
+                    headY - headRadius * 0.5,
+                    headRadius * 1.5,
+                    headRadius * 0.2
+                  );
+                } else if (direction === 'left' || direction === 'right') {
+                  // 横向きの帽子
+                  const dirMod = direction === 'left' ? -1 : 1;
+                  
+                  // 帽子の上部
+                  drawEllipse(
+                    graphics,
+                    centerX + dirMod * headRadius * 0.2,
+                    headY - headRadius * 0.8,
+                    headRadius * 0.8,
+                    headRadius * 0.5
+                  );
+                  
+                  // 帽子のつば（前または後ろに突き出た部分）
+                  graphics.fillRect(
+                    centerX - dirMod * headRadius * 0.8,
+                    headY - headRadius * 0.6,
+                    headRadius * 1.0,
+                    headRadius * 0.2
+                  );
+                }
+              }
+            }
+            
+            // バリアントに基づいた追加アクセサリー
+            if (variant === 'armored' && details) {
+              // 鎧の装飾
+              graphics.fillStyle(features.accessoryColor, 1);
+              
+              if (direction === 'down') {
+                // 鎧の紋章
+                graphics.fillCircle(
+                  centerX,
+                  bodyY - bodyHeight * 0.2,
+                  bodyWidth * 0.15
+                );
+              }
+            }
+            break;
+        }
+      }
+    }
+    
+    /**
+     * 鎧の騎士キャラクターのオプションを取得
+     * @param {number} color - ベースカラー
+     * @returns {Object} カスタマイズオプション
+     */
+    getKnightOptions(color) {
+      return {
+        armorColor: color,
+        hairColor: darkenColor(color, 40),
+        hasHelmet: true,
+        hasShield: true,
+        hasWeapon: true,
+        weaponType: 'sword'
+      };
+    }
+    
+    /**
+     * 魔法使いキャラクターのオプションを取得
+     * @param {number} color - ベースカラー
+     * @returns {Object} カスタマイズオプション
+     */
+    getWizardOptions(color) {
+      return {
+        clothColor: color,
+        hairColor: 0x888888, // 白髪に近いグレー
+        hasHat: true,
+        hasWeapon: true,
+        weaponType: 'staff',
+        hairStyle: 'long'
+      };
+    }
+    
+    /**
+     * 盗賊キャラクターのオプションを取得
+     * @param {number} color - ベースカラー
+     * @returns {Object} カスタマイズオプション
+     */
+    getRogueOptions(color) {
+      return {
+        clothColor: color,
+        hairColor: darkenColor(color, 50),
+        hasHood: true,
+        hasWeapon: true,
+        weaponType: 'dagger'
+      };
+    }
+    
+    /**
+     * 弓使いキャラクターのオプションを取得
+     * @param {number} color - ベースカラー
+     * @returns {Object} カスタマイズオプション
+     */
+    getArcherOptions(color) {
+      return {
+        clothColor: color,
+        hairColor: brightenColor(color, 30),
+        hairStyle: 'ponytail',
+        hasWeapon: true,
+        weaponType: 'bow'
+      };
+    }
+    
+    /**
+     * 楕円を描画するヘルパー関数
+     * @param {Phaser.GameObjects.Graphics} graphics - グラフィックスオブジェクト
+     * @param {number} x - 中心X座標
+     * @param {number} y - 中心Y座標
+     * @param {number} radiusX - X軸半径
+     * @param {number} radiusY - Y軸半径
+     */
+    drawEllipse(graphics, x, y, radiusX, radiusY) {
+      graphics.beginPath();
+      graphics.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+      graphics.fill();
+    }
+    
+    /**
+     * 色を明るくする
+     * @param {number} color - 元の色
+     * @param {number} percent - 明るくする割合（0-100）
+     * @returns {number} 明るくした色
+     */
+    brightenColor(color, percent) {
+      // 16進数の色から各成分を抽出
+      const r = (color >> 16) & 0xFF;
+      const g = (color >> 8) & 0xFF;
+      const b = color & 0xFF;
+      
+      // 各成分を明るくする
+      const newR = Math.min(255, r + Math.floor(r * percent / 100));
+      const newG = Math.min(255, g + Math.floor(g * percent / 100));
+      const newB = Math.min(255, b + Math.floor(b * percent / 100));
+      
+      // 新しい色を16進数に変換して返す
+      return (newR << 16) | (newG << 8) | newB;
+    }
+    
+    /**
+     * 色を暗くする
+     * @param {number} color - 元の色
+     * @param {number} percent - 暗くする割合（0-100）
+     * @returns {number} 暗くした色
+     */
+    darkenColor(color, percent) {
+      // 16進数の色から各成分を抽出
+      const r = (color >> 16) & 0xFF;
+      const g = (color >> 8) & 0xFF;
+      const b = color & 0xFF;
+      
+      // 各成分を暗くする
+      const newR = Math.max(0, r - Math.floor(r * percent / 100));
+      const newG = Math.max(0, g - Math.floor(g * percent / 100));
+      const newB = Math.max(0, b - Math.floor(b * percent / 100));
+      
+      // 新しい色を16進数に変換して返す
+      return (newR << 16) | (newG << 8) | newB;
+    }
+
+    /**
+     * 敵キャラクタープレースホルダーを作成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} key - テクスチャーキー
+     * @param {string} enemyType - 敵タイプ（'skeleton', 'zombie', 'ghost', 'spider', 'slime', 'wolf', 'boss'）
+     */
+    createEnemyCharacter(scene, key, enemyType) {
+      // 敵タイプに応じた色を取得
+      const enemyColors = {
+        skeleton: 0xBDBDBD,  // 薄い灰色
+        zombie: 0x556B2F,    // オリーブ
+        ghost: 0xE6E6FA,     // 薄い紫
+        spider: 0x800080,    // 紫
+        slime: 0x00FF7F,     // 春の緑
+        wolf: 0x8B4513,      // サドルブラウン
+        boss: 0xFF0000       // 赤
+      };
+      
+      // 敵タイプに応じたキャラクタータイプを取得
+      const characterTypes = {
+        skeleton: 'humanoid',
+        zombie: 'humanoid',
+        ghost: 'ghost',
+        spider: 'monster',
+        slime: 'slime',
+        wolf: 'monster',
+        boss: 'humanoid'
+      };
+      
+      // 色とキャラクタータイプを取得
+      const color = enemyColors[enemyType] || 0xFF0000;
+      const characterType = characterTypes[enemyType] || 'humanoid';
+      
+      // 敵キャラクターを作成
+      createEnhancedCharacter(scene, key, color, characterType);
+    }
+
+    /**
+     * キャラクターアニメーションのデバッグビューを作成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} baseKey - ベースとなるテクスチャーキー
+     * @param {string[]} actions - 表示する動作の配列
+     * @param {string[]} directions - 表示する方向の配列
+     * @param {Object} options - その他のオプション
+     */
+    createCharacterDebugView(scene, baseKey, actions = ['idle', 'walk'], directions = ['down', 'left', 'right', 'up'], options = {}) {
+      if (!scene) return;
+      
+      const defaultOptions = {
+        x: 50,
+        y: 50,
+        spacing: 10,
+        scale: 1,
+        frameWidth: 32,
+        frameHeight: 32,
+        backgroundColor: 0x222222,
+        textColor: 0xFFFFFF
+      };
+      
+      const settings = { ...defaultOptions, ...options };
+      
+      // デバッグコンテナを作成
+      const container = scene.add.container(settings.x, settings.y);
+      
+      // 背景を作成
+      const totalWidth = (settings.frameWidth + settings.spacing) * directions.length + settings.spacing;
+      const totalHeight = (settings.frameHeight + settings.spacing) * actions.length + settings.spacing + 20; // 20はテキスト用
+      
+      const background = scene.add.rectangle(0, 0, totalWidth, totalHeight, settings.backgroundColor, 0.7);
+      background.setOrigin(0, 0);
+      container.add(background);
+      
+      // 各アクションと方向の組み合わせでスプライトを表示
+      let offsetY = settings.spacing + 20; // 上部にテキスト用のスペース
+      
+      for (const action of actions) {
+        let offsetX = settings.spacing;
+        
+        // アクション名を表示
+        const actionText = scene.add.text(
+          settings.spacing, 
+          offsetY - 15, 
+          action, 
+          { fontSize: '14px', fill: '#FFFFFF' }
+        );
+        container.add(actionText);
+        
+        for (const direction of directions) {
+          // スプライトシートのキーを生成
+          const textureKey = `${baseKey}_${action}_${direction}_sheet`;
+          
+          // 方向のテキストを表示
+          if (action === actions[0]) {
+            const directionText = scene.add.text(
+              offsetX + settings.frameWidth / 2, 
+              settings.spacing,
+              direction, 
+              { fontSize: '12px', fill: '#FFFFFF' }
+            );
+            directionText.setOrigin(0.5, 0);
+            container.add(directionText);
+          }
+          
+          // アニメーションが存在するか確認
+          if (scene.textures.exists(textureKey)) {
+            // アニメーションキーを生成
+            const animKey = `${baseKey}_${action}_${direction}_debug`;
+            
+            // アニメーションが存在しなければ作成
+            if (!scene.anims.exists(animKey)) {
+              scene.anims.create({
+                key: animKey,
+                frames: scene.anims.generateFrameNumbers(textureKey, { start: 0, end: 3 }),
+                frameRate: 8,
+                repeat: -1
+              });
+            }
+            
+            // スプライトを作成
+            const sprite = scene.add.sprite(
+              offsetX + settings.frameWidth / 2, 
+              offsetY + settings.frameHeight / 2, 
+              textureKey
+            );
+            sprite.play(animKey);
+            sprite.setScale(settings.scale);
+            container.add(sprite);
+          } else {
+            // テクスチャが存在しない場合は代替表示
+            const placeholder = scene.add.rectangle(
+              offsetX + settings.frameWidth / 2, 
+              offsetY + settings.frameHeight / 2,
+              settings.frameWidth, 
+              settings.frameHeight, 
+              0xFF0000, 
+              0.5
+            );
+            container.add(placeholder);
+            
+            const noTexText = scene.add.text(
+              offsetX + settings.frameWidth / 2, 
+              offsetY + settings.frameHeight / 2, 
+              'N/A', 
+              { fontSize: '10px', fill: '#FFFFFF' }
+            );
+            noTexText.setOrigin(0.5, 0.5);
+            container.add(noTexText);
+          }
+          
+          offsetX += settings.frameWidth + settings.spacing;
+        }
+        
+        offsetY += settings.frameHeight + settings.spacing;
+      }
+      
+      // タイトルを追加
+      const title = scene.add.text(
+        totalWidth / 2, 
+        settings.spacing / 2, 
+        `Character: ${baseKey}`, 
+        { fontSize: '16px', fill: '#FFFFFF', fontWeight: 'bold' }
+      );
+      title.setOrigin(0.5, 0);
+      container.add(title);
+      
+      return container;
+    }
+
+    /**
+     * シンプルなキャラクターコントローラーを作成
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {Phaser.GameObjects.Sprite} sprite - キャラクタースプライト
+     * @param {Object} config - 設定オブジェクト
+     * @returns {Object} コントローラーオブジェクト
+     */
+    createSimpleCharacterController(scene, sprite, config = {}) {
+      if (!scene || !sprite) {
+        console.error('有効なシーンとスプライトが必要です');
+        return null;
+      }
+      
+      const defaultConfig = {
+        speed: 2,
+        animations: {
+          idle: {
+            down: 'idle_down',
+            up: 'idle_up',
+            left: 'idle_left',
+            right: 'idle_right'
+          },
+          walk: {
+            down: 'walk_down',
+            up: 'walk_up',
+            left: 'walk_left',
+            right: 'walk_right'
+          },
+          attack: {
+            down: 'attack_down',
+            up: 'attack_up',
+            left: 'attack_left',
+            right: 'attack_right'
+          }
+        },
+        keys: {
+          up: Phaser.Input.Keyboard.KeyCodes.W,
+          down: Phaser.Input.Keyboard.KeyCodes.S,
+          left: Phaser.Input.Keyboard.KeyCodes.A,
+          right: Phaser.Input.Keyboard.KeyCodes.D,
+          attack: Phaser.Input.Keyboard.KeyCodes.SPACE
+        }
+      };
+      
+      const settings = { ...defaultConfig, ...config };
+      
+      // キーの設定
+      const keys = {
+        up: scene.input.keyboard.addKey(settings.keys.up),
+        down: scene.input.keyboard.addKey(settings.keys.down),
+        left: scene.input.keyboard.addKey(settings.keys.left),
+        right: scene.input.keyboard.addKey(settings.keys.right),
+        attack: scene.input.keyboard.addKey(settings.keys.attack)
+      };
+      
+      // 現在の状態
+      const state = {
+        direction: 'down',
+        action: 'idle',
+        isAttacking: false
+      };
+      
+      // アニメーション再生関数
+      const playAnimation = (action, direction) => {
+        const animKey = settings.animations[action][direction];
+        if (animKey && !sprite.anims.isPlaying || sprite.anims.currentAnim?.key !== animKey) {
+          sprite.play(animKey);
+        }
+      };
+      
+      // 攻撃開始関数
+      const startAttack = () => {
+        state.isAttacking = true;
+        state.action = 'attack';
+        playAnimation('attack', state.direction);
+        
+        // 攻撃アニメーション終了時のハンドラー
+        sprite.once('animationcomplete', () => {
+          state.isAttacking = false;
+          state.action = 'idle';
+          playAnimation('idle', state.direction);
+        });
+      };
+      
+      // 更新関数
+      const update = () => {
+        // 攻撃中は移動できない
+        if (state.isAttacking) return;
+        
+        // 攻撃キーが押されたら攻撃開始
+        if (Phaser.Input.Keyboard.JustDown(keys.attack)) {
+          startAttack();
+          return;
+        }
+        
+        // 移動処理
+        let isMoving = false;
+        
+        if (keys.up.isDown) {
+          sprite.y -= settings.speed;
+          state.direction = 'up';
+          isMoving = true;
+        } else if (keys.down.isDown) {
+          sprite.y += settings.speed;
+          state.direction = 'down';
+          isMoving = true;
+        }
+        
+        if (keys.left.isDown) {
+          sprite.x -= settings.speed;
+          state.direction = 'left';
+          isMoving = true;
+        } else if (keys.right.isDown) {
+          sprite.x += settings.speed;
+          state.direction = 'right';
+          isMoving = true;
+        }
+        
+        // 移動状態に応じてアニメーションを更新
+        if (isMoving) {
+          if (state.action !== 'walk') {
+            state.action = 'walk';
+            playAnimation('walk', state.direction);
+          }
+        } else {
+          if (state.action !== 'idle') {
+            state.action = 'idle';
+            playAnimation('idle', state.direction);
+          }
+        }
+      };
+      
+      // 初期アニメーション
+      playAnimation('idle', state.direction);
+      
+      // 公開API
+      return {
+        update,
+        keys,
+        state,
+        sprite
+      };
+    }
+
+
     // ヘルパー関数：タイルタイプから色を取得
     getTileColor(tileType) {
       const tileColors = {

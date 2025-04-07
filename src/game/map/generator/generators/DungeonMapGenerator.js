@@ -8,17 +8,26 @@ class DungeonMapGenerator extends MapGenerator {
    * ダンジョンマップを生成（部屋と通路の迷宮）
    */
   generateDungeonMap() {
+    // 全てのタイルを初期状態にリセット
+    const { width, height } = this.options;
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        // 最初は全て壁として扱う
+        this.objectPlacement[x][y] = 4; // 壁
+      }
+    }
+    
     // 部屋を生成
     this.generateRooms();
     
     // 部屋同士を通路で接続
     this.connectRooms();
     
-    // 壁を生成
-    this.generateWalls();
-    
     // 地形の高さマップを生成（床の微妙な凹凸など）
     this.generateHeightMapFromRooms();
+    
+    // 最後に壁と床の周辺に微調整を行う
+    this.finalizeWallsAndFloors();
   }
 
   /**
@@ -152,14 +161,6 @@ class DungeonMapGenerator extends MapGenerator {
     for (let x = startX; x <= endX; x++) {
       if (x >= 0 && x < width && y >= 0 && y < height) {
         this.objectPlacement[x][y] = 0; // 通路をマーク
-        
-        // 通路の両側に壁を設置（既存の部屋や通路を上書きしない）
-        if (y - 1 >= 0 && this.objectPlacement[x][y - 1] !== 0) {
-          this.objectPlacement[x][y - 1] = 4; // 壁としてマーク
-        }
-        if (y + 1 < height && this.objectPlacement[x][y + 1] !== 0) {
-          this.objectPlacement[x][y + 1] = 4; // 壁としてマーク
-        }
       }
     }
   }
@@ -178,37 +179,24 @@ class DungeonMapGenerator extends MapGenerator {
     for (let y = startY; y <= endY; y++) {
       if (x >= 0 && x < width && y >= 0 && y < height) {
         this.objectPlacement[x][y] = 0; // 通路をマーク
-        
-        // 通路の両側に壁を設置（既存の部屋や通路を上書きしない）
-        if (x - 1 >= 0 && this.objectPlacement[x - 1][y] !== 0) {
-          this.objectPlacement[x - 1][y] = 4; // 壁としてマーク
-        }
-        if (x + 1 < width && this.objectPlacement[x + 1][y] !== 0) {
-          this.objectPlacement[x + 1][y] = 4; // 壁としてマーク
-        }
       }
     }
   }
 
   /**
-   * 部屋と通路の周りに壁を生成
+   * 壁と床の最終調整
+   * 通路や部屋の周りに壁を確定させる
    */
-  generateWalls() {
-    const { width, height } = this.options;
+  finalizeWallsAndFloors() {
+    const { width, height, wallDensity } = this.options;
+    const adjustedWallDensity = wallDensity * 1.3; // ダンジョンは壁が多め
     
-    // 一時的な配列にコピー
-    const tempMap = this.create2DArray(width, height, 0);
+    // 床や通路に接していない壁は削除（孤立した壁を防止）
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
-        tempMap[x][y] = this.objectPlacement[x][y];
-      }
-    }
-    
-    // 空きスペースの周りに壁を配置
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) {
-        // 現在のセルが空きスペースの場合
-        if (tempMap[x][y] === 0) {
+        if (this.objectPlacement[x][y] === 4) { // 壁の場合
+          let hasAdjacentFloor = false;
+          
           // 周囲8方向を調べる
           const directions = [
             [-1, -1], [0, -1], [1, -1],
@@ -220,12 +208,44 @@ class DungeonMapGenerator extends MapGenerator {
             const nx = x + dx;
             const ny = y + dy;
             
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              // 隣接セルが何もない場合、壁に設定
-              if (tempMap[nx][ny] !== 0 && this.objectPlacement[nx][ny] !== 3) {
-                this.objectPlacement[nx][ny] = 4; // 壁としてマーク
-              }
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height && this.objectPlacement[nx][ny] === 0) {
+              hasAdjacentFloor = true;
+              break;
             }
+          }
+          
+          // 床に接していない孤立した壁は削除
+          if (!hasAdjacentFloor) {
+            this.objectPlacement[x][y] = 4; // 壁のまま（後で他のマップ生成で利用可能）
+          }
+        }
+      }
+    }
+    
+    // 部屋や通路の内部にランダムな壁（柱）を追加
+    for (let x = 1; x < width - 1; x++) {
+      for (let y = 1; y < height - 1; y++) {
+        if (this.objectPlacement[x][y] === 0) { // 床の場合
+          // 周囲が全て床かチェック（部屋の内部のみに柱を置くため）
+          let surroundedByFloor = true;
+          
+          const directions = [
+            [0, -1], [-1, 0], [1, 0], [0, 1]
+          ];
+          
+          for (const [dx, dy] of directions) {
+            const nx = x + dx;
+            const ny = y + dy;
+            
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height || this.objectPlacement[nx][ny] !== 0) {
+              surroundedByFloor = false;
+              break;
+            }
+          }
+          
+          // 部屋の内部にランダムな壁を追加
+          if (surroundedByFloor && this.rng() < adjustedWallDensity * 0.5) {
+            this.objectPlacement[x][y] = 4; // 壁として柱を設置
           }
         }
       }
@@ -243,10 +263,10 @@ class DungeonMapGenerator extends MapGenerator {
       for (let y = 0; y < height; y++) {
         // 部屋や通路は平らに、壁は高くする
         if (this.objectPlacement[x][y] === 0) {
-          // 部屋や通路には微妙な凹凸を追加 - 常に0.3以上に
+          // 部屋や通路には微妙な凹凸を追加
           const noise = this.noise2D(x * noiseScale * 0.5, y * noiseScale * 0.5) * 0.1;
-          this.heightMap[x][y] = 0.4 + noise; // 0.3ではなく0.4から始めて安全マージンを確保
-        } else if (this.objectPlacement[x][y] === 3 || this.objectPlacement[x][y] === 4) {
+          this.heightMap[x][y] = 0.4 + noise;
+        } else if (this.objectPlacement[x][y] === 4) {
           // 壁は高くする
           const noise = this.noise2D(x * noiseScale, y * noiseScale) * 0.2;
           this.heightMap[x][y] = 0.8 + noise;
@@ -268,7 +288,7 @@ Object.assign(MapGenerator.prototype, {
   connectRooms: DungeonMapGenerator.prototype.connectRooms,
   createHorizontalCorridor: DungeonMapGenerator.prototype.createHorizontalCorridor,
   createVerticalCorridor: DungeonMapGenerator.prototype.createVerticalCorridor,
-  generateWalls: DungeonMapGenerator.prototype.generateWalls,
+  finalizeWallsAndFloors: DungeonMapGenerator.prototype.finalizeWallsAndFloors,
   generateHeightMapFromRooms: DungeonMapGenerator.prototype.generateHeightMapFromRooms
 });
 

@@ -8,7 +8,8 @@ class FieldMapGenerator extends MapGenerator {
    * フィールドマップを生成（草原や荒野など）
    */
   generateFieldMap() {
-    const { width, height, noiseScale } = this.options;
+    const { width, height, noiseScale, wallDensity } = this.options;
+    const adjustedWallDensity = wallDensity * 0.5; // フィールドは壁が少なめ
     
     // ノイズを使用して自然な地形を生成
     for (let x = 0; x < width; x++) {
@@ -23,10 +24,10 @@ class FieldMapGenerator extends MapGenerator {
         // 地形の高さに基づいてオブジェクト配置を設定
         if (this.heightMap[x][y] < 0.3) {
           // 低地（水域など）- 移動不可能
-          this.objectPlacement[x][y] = 3; // 移動不可能な障害物として設定
+          this.objectPlacement[x][y] = 1; // 水として設定
         } else if (this.heightMap[x][y] > 0.75) {
           // 高地（山や丘など）
-          this.objectPlacement[x][y] = 3; // 移動不可能な障害物
+          this.objectPlacement[x][y] = 4; // 壁として設定
         } else {
           // 中間地形（草原など）
           this.objectPlacement[x][y] = 0; // 基本は移動可能
@@ -36,6 +37,9 @@ class FieldMapGenerator extends MapGenerator {
     
     // いくつかのフィールド特有のエリアを作成（森、湖など）
     this.createFieldFeatures();
+    
+    // 移動可能な領域に自然な障害物を配置（岩や切り株など）
+    this.placeNaturalObstacles(adjustedWallDensity);
   }
 
   /**
@@ -77,6 +81,56 @@ class FieldMapGenerator extends MapGenerator {
   }
 
   /**
+   * 自然な障害物を配置
+   * @param {number} wallDensity - 壁の密度
+   */
+  placeNaturalObstacles(wallDensity) {
+    const { width, height } = this.options;
+    
+    // 障害物の密度を調整
+    const obstacleDensity = wallDensity * 2; // 壁の密度の2倍
+    
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        // 移動可能な領域にのみ配置
+        if (this.objectPlacement[x][y] === 0) {
+          // ランダムに障害物を配置
+          if (this.rng() < obstacleDensity) {
+            // 周囲の状態を確認（孤立した障害物を避けるため）
+            let adjacentOpen = 0;
+            
+            // 隣接する4方向をチェック
+            const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+            
+            for (const [dx, dy] of directions) {
+              const nx = x + dx;
+              const ny = y + dy;
+              
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height && this.objectPlacement[nx][ny] === 0) {
+                adjacentOpen++;
+              }
+            }
+            
+            // 少なくとも2方向が開いている場合に配置
+            if (adjacentOpen >= 2) {
+              // 障害物の種類をランダムに決定
+              if (this.rng() < 0.3) {
+                // 壁として配置（岩など）
+                this.objectPlacement[x][y] = 4;
+                this.heightMap[x][y] = 0.6 + this.rng() * 0.2;
+              } else {
+                // 障害物として配置（低い植物など）
+                this.objectPlacement[x][y] = 3;
+                this.heightMap[x][y] = 0.5 + this.rng() * 0.1;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * 森エリアを生成
    * @param {number} centerX - 中心X座標
    * @param {number} centerY - 中心Y座標
@@ -96,12 +150,13 @@ class FieldMapGenerator extends MapGenerator {
           if (distance <= size) {
             // 確率に基づいて木を配置
             if (this.rng() < density * (1 - distance / size)) {
-              // 木を配置（移動できない障害物として）
-              this.objectPlacement[x][y] = 3;
+              // 木を配置（移動できない壁として - 森の木は大きい）
+              this.objectPlacement[x][y] = 4; // 壁として配置
               // 木の高さを設定
               this.heightMap[x][y] = 0.6 + this.rng() * 0.3;
             } else {
               // 森の地面
+              this.objectPlacement[x][y] = 0; // 移動可能
               this.heightMap[x][y] = 0.4 + this.rng() * 0.1;
             }
           }
@@ -129,8 +184,8 @@ class FieldMapGenerator extends MapGenerator {
             const depth = 0.2 - (0.1 * distance / size); // 最大深度を0.2に設定
             this.heightMap[x][y] = depth;
             
-            // 湖は全て移動不可
-            this.objectPlacement[x][y] = 3;
+            // 湖は水として設定
+            this.objectPlacement[x][y] = 1; // 水（移動不可）
           }
         }
       }
@@ -219,6 +274,7 @@ class FieldMapGenerator extends MapGenerator {
 Object.assign(MapGenerator.prototype, {
   generateFieldMap: FieldMapGenerator.prototype.generateFieldMap,
   createFieldFeatures: FieldMapGenerator.prototype.createFieldFeatures,
+  placeNaturalObstacles: FieldMapGenerator.prototype.placeNaturalObstacles,
   createForest: FieldMapGenerator.prototype.createForest,
   createLake: FieldMapGenerator.prototype.createLake,
   createPath: FieldMapGenerator.prototype.createPath,

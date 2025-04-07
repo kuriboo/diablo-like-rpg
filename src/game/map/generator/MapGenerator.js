@@ -30,7 +30,7 @@ class MapGenerator {
       enemyDensity: 0.05, // 敵の密度
       chestDensity: 0.02, // 宝箱の密度
       obstacleDensity: 0.01, // 障害物の密度
-      wallDensity: 0.015, // 壁の密度（新しく追加）
+      wallDensity: 0.015, // 壁の密度
       npcDensity: 0.01, // NPCの密度
       difficultyLevel: 'normal', // 難易度: normal, nightmare, hell
       ...options
@@ -46,7 +46,7 @@ class MapGenerator {
     // 地形データ
     this.heightMap = [];
     
-    // オブジェクト配置データ
+    // オブジェクト配置データ (0: 床, 1: 水, 2: 宝箱, 3: 障害物, 4: 壁)
     this.objectPlacement = [];
     
     // 敵配置データ
@@ -147,7 +147,7 @@ class MapGenerator {
         this.generateDungeonMap();
     }
     
-    // オブジェクト配置
+    // オブジェクト配置（宝箱と障害物のみ - 壁は各マップジェネレーターで処理済み）
     this.placeObjects(mapType);
     
     // 敵を配置
@@ -174,6 +174,140 @@ class MapGenerator {
   }
 
   /**
+   * 敵を配置
+   * @param {string} mapType - マップタイプ
+   */
+  placeEnemies(mapType) {
+    const { width, height, enemyDensity, difficultyLevel } = this.options;
+    
+    // マップタイプに応じて敵の配置密度や種類を調整
+    let adjustedEnemyDensity = enemyDensity;
+    let enemyTypeDistribution = {
+      normal: 0.6,   // 通常の敵
+      elite: 0.3,    // エリート敵
+      boss: 0.1      // ボス敵
+    };
+    
+    switch (mapType) {
+      case 'dungeon':
+        adjustedEnemyDensity *= 1.2;
+        break;
+      case 'field':
+        adjustedEnemyDensity *= 0.8;
+        enemyTypeDistribution.normal = 0.7;
+        enemyTypeDistribution.elite = 0.25;
+        enemyTypeDistribution.boss = 0.05;
+        break;
+      case 'arena':
+        // アリーナにはボスを確実に配置
+        if (difficultyLevel === 'hell') {
+          // 最高難易度には複数のボスを配置
+          enemyTypeDistribution.normal = 0.3;
+          enemyTypeDistribution.elite = 0.4;
+          enemyTypeDistribution.boss = 0.3;
+        } else {
+          enemyTypeDistribution.normal = 0.4;
+          enemyTypeDistribution.elite = 0.4;
+          enemyTypeDistribution.boss = 0.2;
+        }
+        break;
+      case 'town':
+        // 町には敵をほとんど配置しない
+        adjustedEnemyDensity *= 0.1;
+        enemyTypeDistribution.normal = 0.9;
+        enemyTypeDistribution.elite = 0.1;
+        enemyTypeDistribution.boss = 0;
+        break;
+    }
+    
+    // ボスの配置（アリーナの場合）
+    if (mapType === 'arena') {
+      const centerX = Math.floor(width / 2);
+      const centerY = Math.floor(height / 2);
+      
+      this.enemyPlacement.push({
+        x: centerX,
+        y: centerY,
+        type: 'boss',
+        level: difficultyLevel === 'hell' ? 3 : (difficultyLevel === 'nightmare' ? 2 : 1)
+      });
+    }
+    
+    // 残りの敵をランダムに配置
+    const totalEnemies = Math.floor(width * height * adjustedEnemyDensity);
+    let enemiesPlaced = this.enemyPlacement.length;
+    
+    while (enemiesPlaced < totalEnemies) {
+      const x = Math.floor(this.rng() * width);
+      const y = Math.floor(this.rng() * height);
+      
+      // 移動可能なスペースのみに敵を配置
+      if (this.objectPlacement[x][y] === 0 && this.heightMap[x][y] >= 0.3) {
+        // 敵の種類をランダムに決定
+        const enemyRoll = this.rng();
+        let enemyType;
+        
+        if (enemyRoll < enemyTypeDistribution.normal) {
+          enemyType = 'normal';
+        } else if (enemyRoll < enemyTypeDistribution.normal + enemyTypeDistribution.elite) {
+          enemyType = 'elite';
+        } else {
+          enemyType = 'boss';
+        }
+        
+        // 難易度に基づいて敵のレベルを調整
+        let enemyLevel = 1;
+        if (difficultyLevel === 'nightmare') {
+          enemyLevel += this.rng() < 0.5 ? 1 : 0;
+        } else if (difficultyLevel === 'hell') {
+          enemyLevel += 1 + (this.rng() < 0.3 ? 1 : 0);
+        }
+        
+        this.enemyPlacement.push({
+          x, y, type: enemyType, level: enemyLevel
+        });
+        
+        enemiesPlaced++;
+      }
+    }
+  }
+
+  /**
+   * NPCを配置（主に町マップ用）
+   */
+  placeNPCs() {
+    const { width, height, npcDensity } = this.options;
+    
+    // NPCの種類（職業など）
+    const npcTypes = [
+      'merchant', 'blacksmith', 'innkeeper', 'guard', 'citizen', 
+      'questgiver', 'healer', 'elder', 'child', 'farmer'
+    ];
+    
+    // NPCの総数
+    const totalNPCs = Math.floor(width * height * npcDensity);
+    
+    // NPCをランダムに配置
+    for (let i = 0; i < totalNPCs; i++) {
+      const x = Math.floor(this.rng() * width);
+      const y = Math.floor(this.rng() * height);
+      
+      // 移動可能なスペースのみにNPCを配置
+      if (this.objectPlacement[x][y] === 0 && this.heightMap[x][y] >= 0.3) {
+        // NPCの種類をランダムに決定
+        const npcType = npcTypes[Math.floor(this.rng() * npcTypes.length)];
+        
+        // NPCの名前（本来は名前生成アルゴリズムを使用）
+        const npcName = `NPC_${i}`;
+        
+        this.npcPlacement.push({
+          x, y, type: npcType, name: npcName
+        });
+      }
+    }
+  }
+
+  /**
    * TensorFlowでマップ生成を拡張（初歩的な実装）
    */
   async initializeTensorFlowModel() {
@@ -183,11 +317,8 @@ class MapGenerator {
     }
     
     if (!this.tfModel) {
-      await this.initializeTensorFlowModel();
-    }
-    
-    if (!this.tfModel) {
-      return {}; // モデル初期化に失敗した場合
+      console.warn('TensorFlow model initialization skipped');
+      return {};
     }
     
     try {
