@@ -476,20 +476,12 @@ export default class MainScene {
           const playerLevel = playerStats.level || this.gameData.playerLevel || 1;
           const playerClass = this.gameData.playerClass || 'warrior';
           
-          // AssetManagerからプレイヤーのテクスチャキーを取得
-          // 必ずAssetManagerを使用し、フォールバックもAssetManagerに任せる
-          const texture = AssetManager.getTextureKey('player', playerClass);
-          
-          // プレイヤーキャラクターの作成 - パラメータを明示的に指定
+          // プレイヤーキャラクターの作成 - AssetManager/CharacterLoaderと連携
           this.player = this.characterFactory.createPlayer({
-            scene: this,
             x: worldPos.x,
             y: worldPos.y,
-            texture: texture,  // AssetManagerが適切なテクスチャキーを返す（プレースホルダー含む）
             level: playerLevel,
-            classType: {
-              name: playerClass || 'warrior' // クラスタイプを明示的にオブジェクトとして渡す
-            },
+            classType: playerClass || 'warrior',
             name: playerStats.name || 'プレイヤー'
           });
           
@@ -522,21 +514,13 @@ export default class MainScene {
             // ダミープレイヤーステータスの生成
             const playerStats = generatePlayerStats('warrior', 5, 'デバッグプレイヤー');
             
-            // AssetManagerからテクスチャキーを取得
-            const texture = AssetManager.getTextureKey('player', 'warrior');
-            
             // プレイヤーキャラクターの作成
             this.player = this.characterFactory.createPlayer({
-              scene: this,
               x: worldPos.x,
               y: worldPos.y,
-              texture: texture,
               level: playerStats.level,
-              classType: {
-                name: playerStats.classType || 'warrior'
-              },
-              name: playerStats.name,
-              stats: playerStats
+              classType: 'warrior',
+              name: playerStats.name
             });
             
             // 以下は通常の処理と同様...
@@ -584,17 +568,12 @@ export default class MainScene {
         // コンパニオンタイプを取得
         const companionType = this.gameData.companionType || 'rogue';
         
-        // AssetManagerからコンパニオンのテクスチャキーを取得
-        const texture = AssetManager.getTextureKey('companion', companionType);
-        
-        // コンパニオンの作成
+        // コンパニオンの作成 - AssetManager/CharacterLoaderと連携
         const companion = this.characterFactory.createCompanion({
-          scene: this,
           x: worldPos.x,
           y: worldPos.y,
-          texture: texture,
           level: this.gameData.playerLevel || 1,
-          type: companionType
+          classType: companionType
         });
         
         // コンパニオンをシーンに追加
@@ -617,62 +596,6 @@ export default class MainScene {
         else if (companion.ai) {
           companion.ai.setPlayer(this.player);
         }
-      }
-      
-      /**
-       * デバッグ用の敵を作成
-       */
-      createDebugEnemies() {
-        // デバッグモードでなければ何もしない
-        if (!this.isDebugMode || !this.player) return;
-        
-        // 敵の数を決定（5～10体）
-        const enemyCount = 5 + Math.floor(Math.random() * 6);
-        
-        for (let i = 0; i < enemyCount; i++) {
-          // プレイヤーから少し離れた位置を取得
-          const position = this.getRandomPositionAwayFromPlayer(400, 600);
-          if (!position) continue;
-          
-          // 敵のレベルを決定（プレイヤーレベル±2）
-          const level = Math.max(1, this.player.level + Math.floor(Math.random() * 5) - 2);
-          
-          // 敵タイプをランダムに決定
-          const enemyTypes = ['skeleton', 'zombie', 'ghost', 'spider', 'slime', 'wolf'];
-          const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-          
-          // AssetManagerから敵のテクスチャキーを取得
-          const texture = AssetManager.getTextureKey('enemy', enemyType);
-          
-          // 敵キャラクターの作成
-          const enemy = this.characterFactory.createEnemy({
-            scene: this,
-            x: position.x,
-            y: position.y,
-            texture: texture,
-            level: level,
-            type: enemyType
-          });
-          
-          // 敵をシーンに追加
-          this.add.existing(enemy);
-          
-          // 敵リストに追加
-          this.enemies.push(enemy);
-          
-          // デプスの設定
-          enemy.setDepth(10);
-          
-          // ActionSystemを使った新しいAI設定
-          if (this.actionSystem) {
-            // 旧AIインスタンスがあれば無効化
-            if (enemy.ai && enemy.ai.setEnabled) {
-              enemy.ai.setEnabled(false);
-            }
-          }
-        }
-        
-        console.log(`🎮 デバッグ用の敵を ${this.enemies.length} 体生成しました`);
       }
 
       /**

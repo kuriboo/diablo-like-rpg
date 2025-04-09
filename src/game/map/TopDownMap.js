@@ -1202,17 +1202,14 @@ export default class TopDownMap {
       // トップダウン座標の計算（マップエンジンが期待する順序でx,yを渡す）
       const worldPos = this.tileToWorldXY(enemyData.x, enemyData.y);
       
-      // AssetManagerから敵のテクスチャキーを取得
-      const texture = AssetManager.getTextureKey('enemy', enemyData.type || 'skeleton');
-      
-      // 敵の生成
+      // 敵の生成 - AssetManager/CharacterLoaderと連携
       const enemy = this.scene.characterFactory.createEnemy({
-        scene: this.scene,
         x: worldPos.x,
         y: worldPos.y,
-        texture: texture,
         level: enemyData.level || this.scene.gameData?.currentLevel || 1,
-        type: enemyData.type || 'skeleton'
+        enemyType: enemyData.type || 'skeleton',
+        isBoss: enemyData.type === 'boss',
+        isElite: enemyData.type === 'elite'
       });
       
       if (enemy) {
@@ -1221,7 +1218,7 @@ export default class TopDownMap {
           enemy.setScale(1.5);
           this.scene.boss = enemy;
         }
-
+  
         enemy.setDepth(10);
         
         // シーンに追加
@@ -1252,26 +1249,20 @@ export default class TopDownMap {
       // トップダウン座標の計算
       const worldPos = this.tileToWorldXY(npcData.x, npcData.y);
       
-      // AssetManagerからNPCのテクスチャキーを取得
-      const texture = AssetManager.getTextureKey('npc', npcData.type || 'villager');
-      
-      // NPCの生成
+      // NPCの生成 - AssetManager/CharacterLoaderと連携
       const npc = this.scene.characterFactory.createNPC({
-        scene: this.scene,
         x: worldPos.x,
         y: worldPos.y,
-        texture: texture,
         type: npcData.type || 'villager',
         isShop: npcData.isShop || false,
+        shopType: npcData.shopType,
+        shopItems: npcData.items || [],
         dialogues: npcData.dialogues || []
       });
       
       if (npc) {
-        // ショップデータの設定
-        if (npcData.isShop && npcData.shopType) {
-          npc.setShopType(npcData.shopType);
-          npc.setShopItems(npcData.items || []);
-        }
+        // NPCのデプス設定
+        npc.setDepth(10);
         
         // シーンに追加
         this.scene.add.existing(npc);

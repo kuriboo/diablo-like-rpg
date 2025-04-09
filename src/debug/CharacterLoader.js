@@ -1,11 +1,13 @@
 /**
  * CharacterLoader.js - PlaceholderAssetsとの連携を強化したキャラクターローダー
+ * AssetManagerとの連携機能を追加
  * 
  * キャラクターごとのタイプ（warrior, rogue, sorcerer, etc.）、動作（idle, walk, attack, etc.）
  * 方向（up, down, left, right）に応じたプレースホルダーアニメーションを生成する機能を提供します。
  */
 
 import PlaceholderAssets from './PlaceholderAssets';
+import AssetManager from '../game/core/AssetManager';
 
 class CharacterLoader {
   constructor() {
@@ -248,6 +250,11 @@ class CharacterLoader {
     );
     
     console.log(`🎨 スプライトシート生成: ${key}`);
+    
+    // AssetManagerにも登録
+    if (AssetManager && AssetManager.registerTexture) {
+      AssetManager.registerTexture(key, 'spritesheet');
+    }
   }
   
   /**
@@ -580,6 +587,94 @@ class CharacterLoader {
    */
   getAvailableDirections() {
     return [...this.directions];
+  }
+  
+  /**
+   * クラスタイプのテクスチャ名を取得
+   * @param {string} classType - クラスタイプ
+   * @returns {string} テクスチャ名
+   */
+  getClassTextureName(classType) {
+    // 文字列の場合は直接マッピング
+    if (typeof classType === 'string') {
+      switch (classType) {
+        case 'warrior':
+        case 'fighter':
+          return 'warrior';
+        case 'rogue':
+        case 'archer':
+          return 'rogue';
+        case 'mage':
+        case 'sorcerer':
+          return 'sorcerer';
+        default:
+          return 'warrior';
+      }
+    }
+    
+    // オブジェクトの場合は名前プロパティを使用
+    if (classType && classType.name) {
+      switch (classType.name.toLowerCase()) {
+        case 'warrior':
+        case 'fighter':
+          return 'warrior';
+        case 'rogue':
+        case 'archer':
+          return 'rogue';
+        case 'mage':
+        case 'sorcerer':
+          return 'sorcerer';
+        default:
+          return 'warrior';
+      }
+    }
+    
+    // デフォルト値
+    return 'warrior';
+  }
+  
+  /**
+   * クラスタイプの基本ステータスを取得
+   * @param {string} classType - クラスタイプ
+   * @returns {Object} 基本ステータス
+   */
+  getClassBaseStats(classType) {
+    // 文字列として処理
+    const type = typeof classType === 'string' ? 
+                 classType : 
+                 (classType && classType.name ? classType.name : 'warrior');
+    
+    switch (type.toLowerCase()) {
+      case 'warrior':
+        return {
+          strength: 20,
+          dexterity: 15,
+          vitality: 25,
+          energy: 10
+        };
+      case 'rogue':
+        return {
+          strength: 15,
+          dexterity: 25,
+          vitality: 15,
+          energy: 15
+        };
+      case 'mage':
+      case 'sorcerer':
+        return {
+          strength: 10,
+          dexterity: 15,
+          vitality: 15,
+          energy: 30
+        };
+      default:
+        return {
+          strength: 15,
+          dexterity: 15,
+          vitality: 15,
+          energy: 15
+        };
+    }
   }
 }
 

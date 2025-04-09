@@ -3,6 +3,7 @@
 import PlaceholderAssets from '../../debug/PlaceholderAssets';
 import SimplePlaceholderAssets from '../../debug/SimplePlaceholderAssets';
 import MapLoader from '../../debug/MapLoader';
+import CharacterLoader from '../../debug/CharacterLoader'; 
 import { isDebugMode } from '../../debug';
 
 /**
@@ -42,6 +43,9 @@ class AssetManager {
     // 統合タイルセット情報
     this.integratedTilesets = null;
     this.tileWalkability = null;
+    
+    // CharacterLoader参照
+    this.characterLoader = null;
     
     // テクスチャマッピング（オブジェクトタイプとテクスチャキーの対応づけ）
     this.textureMap = {
@@ -88,6 +92,62 @@ class AssetManager {
         health_bar: 'ui_health_bar',
         mana_bar: 'ui_mana_bar',
         skill_icon: 'ui_skill_icon'
+      },
+      effect: {
+        attack: 'effect_attack',
+        heal: 'effect_heal',
+        magic: 'effect_magic'
+      }
+    };
+    
+    // アニメーションマッピング
+    this.animationMap = {
+      player: {
+        warrior: {
+          idle: 'player_warrior_idle',
+          walk: 'player_warrior_walk',
+          attack: 'player_warrior_attack',
+          hurt: 'player_warrior_hurt',
+          death: 'player_warrior_death'
+        },
+        rogue: {
+          idle: 'player_rogue_idle',
+          walk: 'player_rogue_walk',
+          attack: 'player_rogue_attack',
+          hurt: 'player_rogue_hurt',
+          death: 'player_rogue_death'
+        },
+        sorcerer: {
+          idle: 'player_sorcerer_idle',
+          walk: 'player_sorcerer_walk',
+          attack: 'player_sorcerer_attack',
+          hurt: 'player_sorcerer_hurt',
+          death: 'player_sorcerer_death'
+        }
+      },
+      enemy: {
+        skeleton: {
+          idle: 'enemy_skeleton_idle',
+          walk: 'enemy_skeleton_walk',
+          attack: 'enemy_skeleton_attack',
+          hurt: 'enemy_skeleton_hurt',
+          death: 'enemy_skeleton_death'
+        },
+        zombie: {
+          idle: 'enemy_zombie_idle',
+          walk: 'enemy_zombie_walk',
+          attack: 'enemy_zombie_attack',
+          hurt: 'enemy_zombie_hurt',
+          death: 'enemy_zombie_death'
+        },
+        ghost: {
+          idle: 'enemy_ghost_idle',
+          walk: 'enemy_ghost_walk',
+          attack: 'enemy_ghost_attack',
+          hurt: 'enemy_ghost_hurt',
+          death: 'enemy_ghost_death'
+        },
+        // 他の敵タイプも同様に定義
       },
       effect: {
         attack: 'effect_attack',
@@ -323,6 +383,9 @@ class AssetManager {
         this.generateDefaultSounds();
       }
       
+      // CharacterLoaderの初期化
+      this.initializeCharacterLoader(scene);
+      
       // テクスチャの検証とマップへの追加
       this.scanTextures(scene);
       
@@ -337,6 +400,25 @@ class AssetManager {
     } catch (error) {
       console.error('AssetManager: 初期化中にエラーが発生しました:', error);
       return false;
+    }
+  }
+
+   /**
+   * CharacterLoaderを初期化
+   * @param {Phaser.Scene} scene - Phaserシーン
+   */
+  initializeCharacterLoader(scene) {
+    console.log('AssetManager: CharacterLoaderを初期化中...');
+    
+    // CharacterLoaderが存在し、まだ初期化されていない場合は初期化
+    if (CharacterLoader) {
+      if (!CharacterLoader.initialized) {
+        CharacterLoader.initialize(scene);
+      }
+      this.characterLoader = CharacterLoader;
+      console.log('AssetManager: CharacterLoaderの初期化が完了しました');
+    } else {
+      console.warn('AssetManager: CharacterLoaderが見つかりません');
     }
   }
 
@@ -707,6 +789,11 @@ class AssetManager {
     if (MapLoader && MapLoader.updateScene) {
       MapLoader.updateScene(scene);
     }
+    
+    // CharacterLoaderのシーンも更新
+    if (this.characterLoader && this.characterLoader.updateScene) {
+      this.characterLoader.updateScene(scene);
+    }
   }
   
   /**
@@ -723,8 +810,85 @@ class AssetManager {
       MapLoader.clearAll();
     }
     
+    // CharacterLoaderもクリア
+    if (this.characterLoader && this.characterLoader.clearAll) {
+      this.characterLoader.clearAll();
+    }
+    
     this.integratedTilesets = null;
     this.tileWalkability = null;
+  }
+
+  /**
+   * キャラクターのスプライトシートとアニメーションを作成
+   * @param {Object} config - キャラクター設定
+   * @returns {Object|null} 生成したアニメーション情報またはnull
+   */
+  createCharacterAnimations(config) {
+    if (!this.characterLoader) {
+      console.warn('AssetManager: CharacterLoaderが初期化されていません');
+      return null;
+    }
+    
+    return this.characterLoader.createCharacterAnimations(config);
+  }
+
+  /**
+   * スプライトにアニメーションを設定
+   * @param {Phaser.GameObjects.Sprite} sprite - アニメーションを設定するスプライト
+   * @param {string} type - キャラクタータイプ ('player', 'enemy', 'npc', 'companion')
+   * @param {string} subtype - サブタイプ ('warrior', 'skeleton' など)
+   * @param {string} action - アクション ('idle', 'walk', 'attack' など)
+   * @param {string} direction - 方向 ('down', 'left', 'right', 'up')
+   * @returns {boolean} アニメーション設定が成功したかどうか
+   */
+  setCharacterAnimation(sprite, type, subtype, action, direction) {
+    if (!this.characterLoader) {
+      console.warn('AssetManager: CharacterLoaderが初期化されていません');
+      return false;
+    }
+    
+    return this.characterLoader.setAnimation(sprite, type, subtype, action, direction);
+  }
+
+  /**
+   * キャラクタータイプに応じたテクスチャ名を取得
+   * @param {string} classType - クラスタイプ
+   * @returns {string} テクスチャ名
+   */
+  getClassTextureName(classType) {
+    if (!this.characterLoader) {
+      // フォールバック実装
+      switch (classType) {
+        case 'warrior':
+        case 'fighter':
+          return 'warrior';
+        case 'rogue':
+        case 'archer':
+          return 'rogue';
+        case 'mage':
+        case 'sorcerer':
+          return 'sorcerer';
+        default:
+          return 'warrior';
+      }
+    }
+    
+    return this.characterLoader.getClassTextureName(classType);
+  }
+
+  /**
+   * キャラクタースプライトを作成
+   * @param {Object} config - キャラクター設定
+   * @returns {Phaser.GameObjects.Sprite|null} 作成したスプライトまたはnull
+   */
+  createCharacterSprite(config) {
+    if (!this.characterLoader) {
+      console.warn('AssetManager: CharacterLoaderが初期化されていません');
+      return null;
+    }
+    
+    return this.characterLoader.createCharacterSprite(config);
   }
   
   /**
