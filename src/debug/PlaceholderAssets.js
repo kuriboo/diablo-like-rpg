@@ -7,11 +7,23 @@
  */
 
 import { brightenColor, darkenColor } from '../utils/ColorUtils';
+/*import AnimationPlaceholders from './placeholders/AnimationPlaceholders';
+import CharacterDetailPlaceholders from './placeholders/CharacterDetailPlaceholders';
+import CharacterMonsterPlaceholders from './placeholders/CharacterMonsterPlaceholders';
+import CharacterPlaceholders from './placeholders/CharacterPlaceholders';
+import CharacterSlimePlaceholders from './placeholders/CharacterSlimePlaceholders';
+import EffectPlaceholders from './placeholders/EffectPlaceholders';
+import ItemPlaceholders from './placeholders/ItemPlaceholders';
+import TilePlaceholders from './placeholders/TilePlaceholders';
+import UIPlaceholders from './placeholders/UIPlaceholders';*/
+
+
 
 /**
  * プレースホルダーアセット生成クラス
  */
 class PlaceholderAssets {
+
     constructor() {
       this.initialized = false;
       this.placeholders = {};
@@ -322,6 +334,37 @@ class PlaceholderAssets {
       return key;
     }
 
+    /**
+     * 単色矩形プレースホルダー作成 (ヘルパー関数)
+     * @param {Phaser.Scene} scene - Phaserシーン
+     * @param {string} key - テクスチャーキー
+     * @param {number} width - 幅
+     * @param {number} height - 高さ
+     * @param {number} color - 色（16進数）
+     * @param {Object} placeholders - プレースホルダーオブジェクト
+     * @param {number} alpha - 透明度
+     */
+    createColorRect(scene, key, width, height, color, placeholders, alpha = 1) {
+      const graphics = scene.add.graphics();
+      
+      // 単色矩形
+      graphics.fillStyle(color, alpha);
+      graphics.fillRect(0, 0, width, height);
+      
+      // 枠線
+      graphics.lineStyle(1, darkenColor(color, 30), alpha);
+      graphics.strokeRect(0, 0, width, height);
+      
+      // テクスチャとして生成して登録
+      graphics.generateTexture(key, width, height);
+      graphics.destroy();
+      
+      // プレースホルダー一覧に追加
+      if (placeholders) {
+        placeholders[key] = { type: 'rect', color, width, height, alpha };
+      }
+    }
+
     // ヘルパー関数：タイルタイプから色を取得
     getTileColor(tileType) {
       const tileColors = {
@@ -371,6 +414,8 @@ class PlaceholderAssets {
       return this.instance;
     }
 }
+
+//export default PlaceholderAssets;
 
 // デフォルトエクスポートとしてシングルトンインスタンスをエクスポート
 export default PlaceholderAssets.getInstance();

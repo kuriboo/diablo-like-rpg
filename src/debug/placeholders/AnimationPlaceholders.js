@@ -1,5 +1,5 @@
 /**
- * placeholders/AnimationGenerator.js - キャラクターアニメーション生成機能
+ * placeholders/AnimationPlaceholders.js - キャラクターアニメーション生成機能
  * 
  * PlaceholderAssetsのアニメーション生成機能を提供します。
  * キャラクターのスプライトシートとアニメーションを生成します。
@@ -7,7 +7,6 @@
 
 import { brightenColor, darkenColor } from '../../utils/ColorUtils';
 import PlaceholderAssets from '../PlaceholderAssets';
-
 
 class AnimationPlaceholders extends PlaceholderAssets {
 
@@ -560,18 +559,15 @@ class AnimationPlaceholders extends PlaceholderAssets {
     console.log(`✅ キャラクターアニメーションセット生成完了: ${baseKey}`);
     return generatedTextures;
   }
-
 }
 
 Object.assign(PlaceholderAssets.prototype, {
   createCharacterSpritesheet: AnimationPlaceholders.prototype.createCharacterSpritesheet,
-  generateRooms: AnimationPlaceholders.prototype.generateRooms,
-  roomsOverlap: DungeonMapGenerator.prototype.roomsOverlap,
-  connectRooms: DungeonMapGenerator.prototype.connectRooms,
-  createHorizontalCorridor: DungeonMapGenerator.prototype.createHorizontalCorridor,
-  createVerticalCorridor: DungeonMapGenerator.prototype.createVerticalCorridor,
-  finalizeWallsAndFloors: DungeonMapGenerator.prototype.finalizeWallsAndFloors,
-  generateHeightMapFromRooms: DungeonMapGenerator.prototype.generateHeightMapFromRooms
+  drawCharacterFrame: AnimationPlaceholders.prototype.drawCharacterFrame,
+  drawEllipse: AnimationPlaceholders.prototype.drawEllipse,
+  drawArm: AnimationPlaceholders.prototype.drawArm,
+  createCharacterAnimationSet: AnimationPlaceholders.prototype.createCharacterAnimationSet,
 });
 
 export default PlaceholderAssets;
+//export default AnimationPlaceholders;
